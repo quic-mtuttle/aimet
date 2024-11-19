@@ -225,7 +225,7 @@ class BaseQuantizationMixin(abc.ABC):
             # TODO: This unfortunately relies on the **class name** of the module, not the real type
             #       of the module due to the limitation of v1 implementation.
             #       Should redefine `aimet_to_to_backend_op_name_map` as `Dict[Type[Module], str]`
-            from aimet_torch.translation_mapping import aimet_op_to_backend_op_name_map
+            from aimet_torch.translation_mapping import aimet_op_to_backend_op_name_map # pylint:disable = cyclic-import
             backend_op_name = aimet_op_to_backend_op_name_map.get(module_cls, None)
             if backend_op_name:
                 aimet_op_to_backend_op_name_map[quantized_cls] = backend_op_name
