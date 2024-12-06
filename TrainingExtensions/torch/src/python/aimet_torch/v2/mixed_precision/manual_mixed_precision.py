@@ -37,11 +37,12 @@
 # =============================================================================
 """ Manual mixed precision configurator """
 
-from typing import overload, Union, List, Dict, get_args, Type, Optional
+from typing import overload, Union, List, Tuple, Dict, get_args, Type, Optional
 import torch
 
 from aimet_common.utils import AimetLogger
-from aimet_torch.v2.mixed_precision.utils import UserRequest, RequestType, SupportedDType, MpHandler
+from aimet_torch.v2.mixed_precision.utils import UserRequest, RequestType, SupportedDType, MpHandler, ModuleProduct
+from aimet_torch.v2.mixed_precision.utils import _broadcast_tuples, _flatten_list
 from aimet_torch.v2.quantsim import QuantizationSimModel
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -69,7 +70,7 @@ class MixedPrecisionConfigurator:
         self.user_requests: Dict[int, UserRequest] = {}
         self.mp_handler = MpHandler(sim)
 
-    def _store_user_request(self, request_type: RequestType, module: Union[torch.nn.Module, Type],
+    def _store_user_request(self, request_type: RequestType, module: Union[torch.nn.Module, Type, ModuleProduct],
                             activation: Union[List[SupportedDType], SupportedDType] = None,
                             param: Optional[Dict[str, SupportedDType]] = None):
         self.user_requests[self.request_count] = UserRequest(request_type=request_type,
@@ -133,21 +134,31 @@ class MixedPrecisionConfigurator:
         else:
             raise TypeError("arg is neither a torch.nn.Module nor of Type[torch.nn.Module]")
 
-    def set_model_input_precision(self, activation):
+    def set_model_input_precision(self, activations: Union[List[SupportedDType], Tuple[SupportedDType], SupportedDType, None]):
         """
         Activation precision which needs to be set to the model inputs
-        :param activation: Activation dtypes for all the inputs of the model
+        :param activations: Activation dtypes for inputs of the model
         """
-        # self._store_user_request(RequestType.set_model_input_precision, None, activation, None)
-        raise NotImplementedError("set_model_input_precision(...) is not yet supported")
+        broadcasted_activations = _broadcast_tuples(activations, self.mp_handler.model_inputs)
+        for activation, model_input in zip(_flatten_list(broadcasted_activations),
+                                           _flatten_list(self.mp_handler.model_inputs)):
+            if activation is not None:
+                if activation not in get_args(SupportedDType):
+                    raise ValueError("Supported inputs for activation are ", get_args(SupportedDType))
+                self._store_user_request(RequestType.set_model_input_precision, model_input, activation)
 
-    def set_model_output_precision(self, activation):
+    def set_model_output_precision(self, activations: Union[List[SupportedDType], Tuple[SupportedDType], SupportedDType, None]):
         """
         Activation precision which needs to be set to the model outputs
-        :param activation: Activation dtypes for all the outputs of the model
+        :param activations: Activation dtypes for outputs of the model
         """
-        # self._store_user_request(RequestType.set_model_output_precision, None, activation, None)
-        raise NotImplementedError("set_model_output_precision(...) is not yet supported")
+        broadcasted_activations = _broadcast_tuples(activations, self.mp_handler.model_outputs)
+        for activation, model_output in zip(_flatten_list(broadcasted_activations),
+                                            _flatten_list(self.mp_handler.model_outputs)):
+            if activation is not None:
+                if activation not in get_args(SupportedDType):
+                    raise ValueError("Supported inputs for activation are ", get_args(SupportedDType))
+                self._store_user_request(RequestType.set_model_output_precision, model_output, activation)
 
     def apply(self, config: str = "", strict: bool = True, log_file: str = './mmp_log.txt'):
         """
