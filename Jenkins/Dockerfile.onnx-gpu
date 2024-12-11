@@ -204,7 +204,7 @@ RUN python3 -m pip --no-cache-dir install \
         timm==0.4.12 \
         torchtext \
         tqdm \
-        transformers==4.27.4 \
+        transformers \
         wget && \
     python3 -m ipykernel.kernelspec
 

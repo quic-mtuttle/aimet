@@ -197,7 +197,7 @@ RUN python3 -m pip --no-cache-dir install \
         torchtext \
         torchvision==0.16.2+cpu -f https://download.pytorch.org/whl/torch_stable.html \
         tqdm \
-        transformers==4.27.4 \
+        transformers \
         wget && \
     python3 -m ipykernel.kernelspec
 
