@@ -12,11 +12,13 @@ aimet_torch API
     aimet_torch.seq_mse <seq_mse>
     aimet_torch.batch_norm_fold <bnf>
     aimet_torch.cross_layer_equalization <cle>
+    aimet_torch.model_preparer <model_preparer>
     aimet_torch.mixed_precision <amp>
     aimet_torch.quant_analyzer <quant_analyzer>
     aimet_torch.autoquant <autoquant>
     aimet_torch.bn_reestimation <bn>
     aimet_torch.layer_output_utils <layer_output_generation>
+    aimet_torch.peft <peft_lora>
     aimet_torch.compress <compress>
 
 aimet_torch
@@ -33,11 +35,13 @@ AIMET quantization for PyTorch models provides the following functionality.
 - :ref:`aimet_torch.seq_mse <apiref-torch-seq-mse>`
 - :ref:`aimet_torch.batch_norm_fold <apiref-torch-bnf>`
 - :ref:`aimet_torch.cross_layer_equalization <apiref-torch-cle>`
+- :ref:`aimet_torch.model_preparer <apiref-torch-model-preparer>`
 - :ref:`aimet_torch.mixed_precision <api-torch-amp>`
 - :ref:`aimet_torch.quant_analyzer <apiref-torch-quant-analyzer>`
 - :ref:`aimet_torch.autoquant <apiref-torch-autoquant>`
 - :ref:`aimet_torch.bn_reestimation <apiref-torch-bn>`
 - :ref:`aimet_torch.layer_output_utils <apiref-torch-layer-output-generation>`
+- :ref:`aimet_torch.peft <apiref-torch-peft-lora>`
 - :ref:`aimet_torch.compress <apiref-torch-compress>`
 
 aimet_torch.v2
@@ -87,7 +91,7 @@ still accessible via :mod:`aimet_torch` namespace as before.
     aimet_torch.v2.quantization <v2/quantization>
     aimet_torch.v2.adaround <v2/adaround>
     aimet_torch.v2.seq_mse <v2/seq_mse>
-    aimet_torch.v2.quantsim.config_utils.set_grouped_blockwise_quantization_for_weights <v2/lpbq>
+    aimet_torch.v2.quantsim.config_utils <v2/lpbq>
     aimet_torch.v2.mixed_precision <v2/mmp>
     aimet_torch.v2.quant_analyzer <v2/quant_analyzer>
     aimet_torch.v2.visualization_tools <v2/interactive_visualization>
@@ -102,7 +106,7 @@ AIMET core APIs for PyTorch framework.
 - :ref:`aimet_torch.v2.quantization <apiref-torch-quantization>`
 - :ref:`aimet_torch.v2.adaround <apiref-torch-v2-adaround>`
 - :ref:`aimet_torch.v2.seq_mse <apiref-torch-v2-seq-mse>`
-- :ref:`aimet_torch.v2.quantsim.config_utils.set_grouped_blockwise_quantization_for_weights <apiref-torch-v2-lpbq>`
+- :ref:`aimet_torch.v2.quantsim.config_utils <apiref-torch-v2-lpbq>`
 - :ref:`aimet_torch.v2.mixed_precision <api-torch-v2-mmp>`
 - :ref:`aimet_torch.v2.quant_analyzer <apiref-torch-v2-quant-analyzer>`
 - :ref:`aimet_torch.v2.visualization_tools <api-torch-v2-interactive-visualization>`
