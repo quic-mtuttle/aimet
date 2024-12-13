@@ -623,8 +623,17 @@ class _KerasModelPreparer:
                         if keras_tensor_index is not None:
                             call_args.pop(keras_tensor_index)
 
-                if "concat" in layer.name:
+                if hasattr(layer, "function") and hasattr(layer.function, "__name__") and \
+                        layer.function.__name__ == "concat":
                     new_output_tensor = layer.call([*call_args], **call_kwargs)
+                elif hasattr(layer, "function") and hasattr(layer.function, "__name__") and \
+                        layer.function.__name__ == "cast":
+                    # Handling the case for cast op where the dtype of input tensor and the cast op is same
+                    source_tensor = call_kwargs['x'] if 'x' in call_kwargs else call_args[0]
+                    source_dtype = source_tensor.dtype
+                    target_dtype = call_kwargs['dtype'] if 'dtype' in call_kwargs else call_args[1].dtype
+                    new_output_tensor = source_tensor if source_dtype == target_dtype else \
+                        layer.call(*call_args, **call_kwargs)
                 else:
                     new_output_tensor = layer.call(*call_args, **call_kwargs)
             else:
