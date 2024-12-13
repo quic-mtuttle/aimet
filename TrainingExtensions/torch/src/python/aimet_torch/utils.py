@@ -975,35 +975,32 @@ def get_all_quantizers(model: torch.nn.Module):
     :returns: List of parameter, input, and output quantizers
     """
     # pylint:disable = cyclic-import
-    from aimet_torch.v2.nn.base import BaseQuantizationMixin# pylint: disable=import-outside-toplevel
-    from aimet_torch.v1.qc_quantize_op import QcQuantizeWrapper# pylint: disable=import-outside-toplevel
-    from aimet_torch.v1.qc_quantize_recurrent import QcQuantizeRecurrent# pylint: disable=import-outside-toplevel
-
-    for m in model.modules():
-        if isinstance(m, BaseQuantizationMixin):
-            raise NotImplementedError(f'{get_all_quantizers.__qualname__} is not supported in AIMET 2')
-
     param_quantizers = []
     input_quantizers = []
     output_quantizers = []
 
-    quant_wrappers = [
-        m for m in model.modules() if isinstance(m, (QcQuantizeWrapper, QcQuantizeRecurrent))
-    ]
-    for quant_wrapper in quant_wrappers:
-        if isinstance(quant_wrapper, QcQuantizeWrapper):
-            param_quantizers.extend(quant_wrapper.param_quantizers.values())
-            input_quantizers.extend(quant_wrapper.input_quantizers)
-            output_quantizers.extend(quant_wrapper.output_quantizers)
-        else:
-            param_quantizers.extend(quant_wrapper.param_quantizers.values())
-            input_quantizers.extend(quant_wrapper.input_quantizers.values())
-            output_quantizers.extend(quant_wrapper.output_quantizers.values())
+    for module in model.modules():
+        _param_qtzrs = getattr(module, 'param_quantizers', {}).values()
+        _input_qtzrs = getattr(module, 'input_quantizers', [])
+        _output_qtzrs = getattr(module, 'output_quantizers', [])
+
+        if _param_qtzrs:
+            param_quantizers.extend(_param_qtzrs)
+
+        if _input_qtzrs:
+            input_quantizers.extend(_input_qtzrs.values()
+                                    if isinstance(_input_qtzrs, dict)
+                                    else _input_qtzrs)
+
+        if _output_qtzrs:
+            output_quantizers.extend(_output_qtzrs.values()
+                                     if isinstance(_output_qtzrs, dict)
+                                     else _output_qtzrs)
 
     return param_quantizers, input_quantizers, output_quantizers
 
 
-def disable_all_quantizers(model: torch.nn.Module) -> Handle:
+def disable_all_quantizers(model: torch.nn.Module):
     """
     Temporarily disable all quantizers in the model within with-as block, or permanently disable
     without employing context manager.
@@ -1012,10 +1009,10 @@ def disable_all_quantizers(model: torch.nn.Module) -> Handle:
     :returns: Handle that enable all quantizers in the model upon handle.remove().
     """
     from aimet_torch.v2.nn.base import BaseQuantizationMixin# pylint: disable=import-outside-toplevel
+    import aimet_torch.v2.utils as v2_utils # pylint: disable=import-outside-toplevel
 
-    for m in model.modules():
-        if isinstance(m, BaseQuantizationMixin):
-            raise NotImplementedError(f'{disable_all_quantizers.__qualname__} is not supported in AIMET 2')
+    if any(isinstance(m, BaseQuantizationMixin) for m in model.modules()):
+        return v2_utils.remove_all_quantizers(model)
 
     param_quantizers, input_quantizers, output_quantizers = get_all_quantizers(model)
     all_quantizers = param_quantizers + input_quantizers + output_quantizers
