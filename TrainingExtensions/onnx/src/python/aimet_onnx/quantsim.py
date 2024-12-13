@@ -376,7 +376,7 @@ class QuantizationSimModel:
         hooks = []
         for name in activations:
             hooks.append(add_hook_to_get_activation(self.model.model, name))
-        sess = QuantizationSimModel.build_session(self.model.model, self.providers,
+        sess = QuantizationSimModel.build_session(self.model.model, ['CPUExecutionProvider'],
                                                   user_onnx_libs=self._user_onnx_libs, path=self._path)
         outputs = sess.run(None, dummy_input)
         for idx in range(len(self.model.graph().output)):
