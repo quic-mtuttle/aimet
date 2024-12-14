@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -34,26 +34,11 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
- # pylint: disable=wildcard-import, unused-wildcard-import, unused-import
-""" Alias to v1/v2 quantsim """
-
-from .utils import _get_default_api
-from ._base.quantsim import (
-    _QuantizerProtocol,
+# pylint: disable=missing-module-docstring
+from .quantsim import (
+    _QuantizationSimModelInterface,
     _QuantizedModuleProtocol,
-    QuantParams,
+    _QuantizerProtocol,
     ExportableQuantModule,
+    QuantParams,
 )
-
-if _get_default_api() == "v1":
-    from .v1.quantsim import *
-
-    from .utils import _warn_replaced_in_v2
-    from .v1 import quantsim as _v1_quantsim
-    from .v2 import quantsim as _v2_quantsim
-
-    _warn_replaced_in_v2(__name__,
-                         v2_new_api=_v2_quantsim.__name__,
-                         v1_legacy_api=_v1_quantsim.__name__)
-else:
-    from .v2.quantsim import *
