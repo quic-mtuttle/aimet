@@ -56,6 +56,7 @@ from aimet_torch.v2 import nn as aimet_nn
 from aimet_torch.v2.nn import BaseQuantizationMixin, QuantizationMixin
 from aimet_torch.v2.nn.fake_quant import _legacy_impl
 from aimet_torch.quantsim_config.builder import LazyQuantizeWrapper
+from aimet_torch.v2._builder import _V2LazyQuantizeWrapper
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
@@ -138,6 +139,8 @@ class QuantizationSimModel(V1QuantizationSimModel):
           ...
         )
     """
+    _lazy_quant_wrapper_cls = _V2LazyQuantizeWrapper
+
     def __init__(self, # pylint: disable=too-many-arguments, too-many-locals, too-many-branches
                  model: torch.nn.Module,
                  dummy_input: Union[torch.Tensor, Sequence[torch.Tensor]],
@@ -472,6 +475,6 @@ class QuantizationSimModel(V1QuantizationSimModel):
     def _realize_quant_wrappers_in_model(self, model: torch.nn.Module):
         for name, child in model.named_children():
             if isinstance(child, LazyQuantizeWrapper):
-                child = child.realize_v2_wrapper()
+                child = child.realize()
                 setattr(model, name, child)
             self._realize_quant_wrappers_in_model(child)
