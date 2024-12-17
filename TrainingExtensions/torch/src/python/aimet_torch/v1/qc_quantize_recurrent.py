@@ -119,7 +119,7 @@ class PackedSequenceInfo:
         return self._sorted_sequence_lens
 
 
-class QcQuantizeRecurrent(torch.nn.Module):
+class QcQuantizeRecurrent(torch.nn.Module): # pylint: disable=too-many-public-methods
     """
     Learns Min and Max for Encodings of Enabled quantizers for a recurrent layer
     """
@@ -175,6 +175,13 @@ class QcQuantizeRecurrent(torch.nn.Module):
         # initial_h tensor at times is substantial different from subsequent ht causing the quantizer initialization
         # to be sub-optimal.
         self._reorder_initial_h_c_stats_update = QcQuantizeRecurrent._is_initial_h_c_stats_update_reordered()
+
+    def get_original_module(self):
+        """
+        Returns the floating point version of quantized module
+        """
+        self.update_params()
+        return self.module_to_quantize
 
     @staticmethod
     def _is_initial_h_c_stats_update_reordered() -> bool:
