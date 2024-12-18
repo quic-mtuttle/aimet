@@ -45,14 +45,14 @@ from torchvision import models
 
 from aimet_common.utils import AimetLogger
 from aimet_torch import batch_norm_fold
-from aimet_torch.v1.batch_norm_fold import fold_all_batch_norms
+from aimet_torch.batch_norm_fold import fold_all_batch_norms
 import aimet_torch.cross_layer_equalization as cle
 from aimet_torch.cross_layer_equalization import CrossLayerScaling, HighBiasFold, equalize_model,\
     ClsSetInfo, GraphSearchUtils
 from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.utils import get_layer_name
-from models.mobilenet import MockMobileNetV2, MockMobileNetV1
-from models.test_models import Float32AndInt64InputModel
+from .models.mobilenet import MockMobileNetV2, MockMobileNetV1
+from .models.test_models import Float32AndInt64InputModel
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 

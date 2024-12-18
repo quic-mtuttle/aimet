@@ -56,7 +56,7 @@ from torch.utils.data import DataLoader
 
 from aimet_common.defs import QuantScheme
 import aimet_torch._base.nn.modules.custom as aimet_modules
-from models.test_models import (
+from ..models.test_models import (
     ModelWithFunctionalReLU,
     SingleResidual,
     ModelWithDuplicateReLU,
@@ -67,7 +67,7 @@ from aimet_torch.model_validator.model_validator import ModelValidator
 from aimet_torch.v1.quantsim import QuantizationSimModel, QuantParams
 from aimet_torch.utils import create_fake_data_loader, get_device, in_eval_mode
 from aimet_torch.model_preparer import prepare_model, _find_functional_name_for_node
-from aimet_torch.v1.batch_norm_fold import fold_all_batch_norms
+from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.cross_layer_equalization import  equalize_model
 from aimet_torch.v1.adaround.adaround_weight import Adaround, AdaroundParameters
 from aimet_torch import bias_correction
