@@ -1,4 +1,40 @@
-.. _install-host:
+.. # =============================================================================
+   #  @@-COPYRIGHT-START-@@
+   #
+   #  Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+   #
+   #  Redistribution and use in source and binary forms, with or without
+   #  modification, are permitted provided that the following conditions are met:
+   #
+   #  1. Redistributions of source code must retain the above copyright notice,
+   #     this list of conditions and the following disclaimer.
+   #
+   #  2. Redistributions in binary form must reproduce the above copyright notice,
+   #     this list of conditions and the following disclaimer in the documentation
+   #     and/or other materials provided with the distribution.
+   #
+   #  3. Neither the name of the copyright holder nor the names of its contributors
+   #     may be used to endorse or promote products derived from this software
+   #     without specific prior written permission.
+   #
+   #  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+   #  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+   #  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+   #  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+   #  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+   #  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+   #  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+   #  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+   #  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+   #  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+   #  POSSIBILITY OF SUCH DAMAGE.
+   #
+   #  SPDX-License-Identifier: BSD-3-Clause
+   #
+   #  @@-COPYRIGHT-END-@@
+   # =============================================================================
+
+.. _installation-host:
 
 ###################################
 AIMET manual installation and setup
@@ -9,7 +45,7 @@ This page describes how to manually install AIMET, including all prerequisites a
 .. note::
 
    You might need to preface the **apt-get install** and **pip3 install** commands with **sudo -H** depending on your user privileges.
-
+   
 .. note::
 
    These instructions assume that pip packages are installed in **/usr/local/lib/python3.10/dist-packages**. Modify the command if you use a different install directory for packages.
@@ -37,8 +73,14 @@ Instructions follow.
     python3 -m pip install --upgrade pip
     apt-get install --assume-yes wget gnupg2
 
+1.2 Install library dependencies.
 
-1.2 If you have multiple Python versions installed, set the default version.
+.. code-block:: bash
+
+    apt-get install liblapacke -y
+
+
+1.3 If you have multiple Python versions installed, set the default version.
 
 .. code-block:: bash
 
@@ -51,14 +93,14 @@ Instructions follow.
 .. note::
 
     The GPU toolkit is required only for GPU variants of AIMET.
-
+    
 The released AIMET GPU packages have been tested with the following CUDA toolkit versions:
 
 - PyTorch 2.1 GPU variant: `CUDA Toolkit 12.1.0 <https://developer.nvidia.com/cuda-12-1-0-download-archive>`_
 - TensorFlow GPU variant: `CUDA Toolkit 11.8.0 <https://developer.nvidia.com/cuda-11-8-0-download-archive>`_
 - ONNX GPU variant: `CUDA Toolkit 11.8.0 <https://developer.nvidia.com/cuda-11-8-0-download-archive>`_
 
-2.1 Visit the CUDA Toolkit link above for the version corresponding to your AIMET GPU package and download the tested version of the CUDA toolkit for your environment.
+2.1 Visit the CUDA Toolkit link above for the verison corresponding to your AIMET GPU package and download the tested version of the CUDA toolkit for your environment.
 
 All versions of the CUDA toolkit are also listed at https://developer.nvidia.com/cuda-toolkit-archive.
 
@@ -98,23 +140,25 @@ Based on your machine learning framework and GPU preference, choose one of the i
 
 **1.1 Select the release tag for the version you want to install.**
 
-For example, "|version|". Releases are listed at: https://github.com/quic/aimet/releases
+For example, "1.34.0". Releases are listed at:
 
-- Identify the .whl file corresponding to the package variant that you want to install.
-- Continue with the instructions below to install AIMET from the .whl file.
+https://github.com/quic/aimet/releases
+
+ - Identify the .whl file corresponding to the package variant that you want to install.
+ - Continue with the instructions below to install AIMET from the .whl file.
 
 **1.2 Set the package details.**
 
-.. parsed-literal::
+.. code-block:: bash
 
-    # Set the release tag, for example "|version|"
+    # Set the release tag, for example "1.34.0"
     export release_tag="<version release tag>"
 
     # Construct the download root URL
-    export download_url="\https://github.com/quic/aimet/releases/download/${release_tag}"
+    export download_url="https://github.com/quic/aimet/releases/download/${release_tag}"
 
     # Set the wheel file name with extension,
-    # for example "aimet_torch-|version|.cu121-cp310-cp310-manylinux_2_34_x86_64.whl"
+    # for example "aimet_torch-1.33.0.cu121-cp310-cp310-manylinux_2_34_x86_64.whl"
     export wheel_file_name="<wheel file name>"
 
     # NOTE: Do the following ONLY for the PyTorch and ONNX variant packages!
@@ -124,7 +168,7 @@ For example, "|version|". Releases are listed at: https://github.com/quic/aimet/
 **1.3 Install the selected AIMET package.**
 
 .. note::
-
+    
     Python dependencies are automatically installed.
 
 .. code-block:: bash
@@ -185,39 +229,35 @@ where **<cuda-version>** is the version of CUDA that you installed in the :ref:`
 2. Installing AIMET for TensorFlow
 ----------------------------------
 
-**2.1 Select the release tag for the version you want to install.**
+**2.1 Select the release tag for the version you want to install, for example, "1.34.0". Releases are listed at:**
 
-For example, "|version|". Releases are listed at: https://github.com/quic/aimet/releases
+https://github.com/quic/aimet/releases
 
-- Identify the .whl file corresponding to the package variant that you want to install
-- Continue with the instructions below to install AIMET from the .whl file
+    - Identify the .whl file corresponding to the package variant that you want to install
+    - Continue with the instructions below to install AIMET from the .whl file
 
 **2.2 Set the package details.**
 
-.. parsed-literal::
+.. code-block:: bash
 
-    # Set the release tag, for example "|version|"
+    # Set the release tag, for example "1.34.0"
     export release_tag="<version release tag>"
 
     # Construct the download root URL
-    export download_url="\https://github.com/quic/aimet/releases/download/${release_tag}"
+    export download_url="https://github.com/quic/aimet/releases/download/${release_tag}"
 
     # Set the wheel file name with extension,
-    # for example "aimet_tensorflow-|version|.cu118-cp310-cp310-manylinux_2_34_x86_64.whl"
+    # for example "aimet_tensorflow-1.34.0.cu118-cp310-cp310-manylinux_2_34_x86_64.whl"
     export wheel_file_name="<wheel file name>"
 
 **2.3 Install the selected AIMET package.**
 
 .. note::
-
+    
     Python dependencies are automatically installed.
 
 .. code-block:: bash
 
-    # Install an compatible version of pip (since the latest version is NOT compatible with our wheel packages)
-    python3 -m pip install pip==24.0
-
-    # Install the wheel package
     python3 -m pip install ${download_url}/${wheel_file_name}
 
 
@@ -259,44 +299,41 @@ where **<cuda-version>** is the version of CUDA that you installed in the :ref:`
 
 **Installation is complete.** Proceed to :ref:`Next steps <man-install-next>`from PyPI.
 
+
 .. _man-install-onnx:
 
 3. Installing AIMET for ONNX
 ----------------------------
 
-**3.1 Select the release tag for the version you want to install.**
+**3.1 Select the release tag for the version you want to install, for example, "1.34.0". Releases are listed at:**
 
-For example, "|version|". Releases are listed at: https://github.com/quic/aimet/releases
+https://github.com/quic/aimet/releases
 
-- Identify the .whl file corresponding to the package variant that you want to install
-- Continue with the instructions below to install AIMET from the .whl file
+    - Identify the .whl file corresponding to the package variant that you want to install
+    - Continue with the instructions below to install AIMET from the .whl file
 
 **3.2 Set the package details.**
 
-.. parsed-literal::
+.. code-block:: bash
 
-    # Set the release tag, for example "|version|"
+    # Set the release tag, for example "1.34.0"
     export release_tag="<version release tag>"
 
     # Construct the download root URL
-    export download_url="\https://github.com/quic/aimet/releases/download/${release_tag}"
+    export download_url="https://github.com/quic/aimet/releases/download/${release_tag}"
 
     # Set the wheel file name with extension,
-    # for example "aimet_onnx-|version|.cu117-cp310-cp310-manylinux_2_34_x86_64.whl"
+    # for example "aimet_onnx-1.34.0.cu117-cp310-cp310-manylinux_2_34_x86_64.whl"
     export wheel_file_name="<wheel file name>"
 
 **3.3 Install the selected AIMET package.**
 
 .. note::
-
+    
     Python dependencies are automatically installed.
 
 .. code-block:: bash
 
-    # Install an compatible version of pip (since the latest version is NOT compatible with our wheel packages)
-    python3 -m pip install pip==24.0
-
-    # Install the wheel package
     python3 -m pip install ${download_url}/${wheel_file_name}
 
 **3.4 Install the common Debian packages.**
@@ -352,11 +389,13 @@ Pillow-SIMD is an optimized version of the Pillow Python Imaging Library. It can
 
 **Installation is complete.** Proceed to :ref:`Next steps <man-install-next>`.
 
+
 .. _man-install-next:
+
 
 Next steps
 ==========
 
-See the :ref:`User guide <opt-guide-index>` to read about the model optimization workflow.
+See the :doc:`Quantization User Guide </user_guide/model_quantization>` for a discussion of how to use AIMET quantization.
 
-See the :ref:`Examples <examples-index>` to try AIMET quantization techniques on your pre-trained models.
+See the :doc:`Examples Documentation </user_guide/examples>` to try AIMET on example quantization and compression problems.

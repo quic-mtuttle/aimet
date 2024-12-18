@@ -1,4 +1,40 @@
-.. _install-docker:
+.. # =============================================================================
+   #  @@-COPYRIGHT-START-@@
+   #
+   #  Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+   #
+   #  Redistribution and use in source and binary forms, with or without
+   #  modification, are permitted provided that the following conditions are met:
+   #
+   #  1. Redistributions of source code must retain the above copyright notice,
+   #     this list of conditions and the following disclaimer.
+   #
+   #  2. Redistributions in binary form must reproduce the above copyright notice,
+   #     this list of conditions and the following disclaimer in the documentation
+   #     and/or other materials provided with the distribution.
+   #
+   #  3. Neither the name of the copyright holder nor the names of its contributors
+   #     may be used to endorse or promote products derived from this software
+   #     without specific prior written permission.
+   #
+   #  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+   #  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+   #  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+   #  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+   #  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+   #  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+   #  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+   #  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+   #  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+   #  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+   #  POSSIBILITY OF SUCH DAMAGE.
+   #
+   #  SPDX-License-Identifier: BSD-3-Clause
+   #
+   #  @@-COPYRIGHT-END-@@
+   # =============================================================================
+
+.. _installation-docker:
 
 ############################
 AIMET installation in Docker
@@ -21,12 +57,11 @@ To install an AIMET development Docker container, you:
 
 1. Decide on an AIMET variant to install
 2. Choose to either:
-
+   
    - Download a prebuilt Docker image
    - Build a Docker image
 
-Follow the instructions below to install AIMET within a Docker container. Depending on your
-installation choices, you will skip various sections on this page.
+Follow the instructions below to install AIMET within a Docker container. Depending on your installation choices, you will skip various sections on this page.
 
 
 1. Choose your AIMET variant
@@ -34,8 +69,7 @@ installation choices, you will skip various sections on this page.
 
 **1.1 Choose a variant.**
 
-Choose a variant (a combination of framework and runtime environment) from the following table.
-Copy the **<variant_string>**.
+Choose a variant (a combination of framework and runtime environment) from the following table. Copy the **<variant_string>**.
 
 .. list-table::
    :widths: 12 12 20
@@ -75,8 +109,7 @@ Set the ``AIMET_VARIANT`` shell variable to your chosen variant string.
 2. Choose to download or build an image
 ---------------------------------------
 
-Choose one of the following options. We recommend using a prebuilt Docker image unless your
-installation requires custom dependencies.
+Choose one of the following options. We recommend using a prebuilt Docker image unless your installation requires custom dependencies.
 
 - :ref:`Download a prebuilt Docker image <docker-install-download>`
 - :ref:`Build a Docker image <docker-install-build>`
@@ -112,7 +145,7 @@ When you start the Docker container, it will be downloaded from the image librar
 
 .. _docker-install-build:
 
-4. Build a Docker image
+1. Build a Docker image
 -----------------------
 
 **4.1 Set environment variables.**
@@ -131,7 +164,7 @@ where:
 **<absolute_path_to_workspace>**
     is the absolute path to the directory where the AIMET Git repository resides on your local machine.
 **<any_tag>**
-    is whatever unique name suffix you want to append to the Docker image.
+    is whatever unique name suffix you want to append to the Docker image. 
 **<container_name>**
     is whatever name you want to assign the AIMET Docker container.
 
@@ -171,6 +204,7 @@ where **<port-number>** is any unused port on the host.
     -v "/local/mnt/workspace":"/local/mnt/workspace" \
     --entrypoint /bin/bash -w ${WORKSPACE} --hostname ${docker_container_name} ${docker_image_name}
 
+
 where:
 
 **[docker_run_command]**
@@ -200,7 +234,8 @@ As a convenience, the following block contains the *first line* of the Docker ru
     nvidia-docker run --rm -it -u $(id -u ${USER}):$(id -g ${USER}) \
 
     # CPU only, without port forwarding:
-    docker run --rm -it -u $(id -u ${USER}):$(id -g ${USER})
+    docker run --rm -it -u $(id -u ${USER}):$(id -g ${USER}) \
+
 
 6. Install AIMET packages
 -------------------------
@@ -208,44 +243,48 @@ As a convenience, the following block contains the *first line* of the Docker ru
 **Choose an option to install the AIMET package on the Docker container.**
 
 1.  From PyPI (PyTorch only)
-2.  Any framework variant (hosted **.whl** files)
+2.  Any variant (hosted **.whl** files)
 
 **6.1 To install the most recent PyTorch AIMET package with GPU support (the most common option) from PyPI, type the following commands in the Docker container.**
 
 .. code-block:: bash
 
+    apt-get install liblapacke -y
     python3 -m pip install aimet-torch
 
-**6.2 To install the latest version of any AIMET variant from the.whl files.**
+**6.2 To install the latest version of any AIMET variant from the.whl files hosted at https://github.com/quic/aimet/releases.**
 
-6.2.1 Select the release tag for the version you want to install, for example, "|version|".
 
-Releases are listed at: https://github.com/quic/aimet/releases
 
-- Identify the .whl file corresponding to the package variant that you want to install
-- Continue with the instructions below to install AIMET from the .whl file
+6.2.1 Select the release tag for the version you want to install, for example, "1.34.0". Releases are listed at:
+
+https://github.com/quic/aimet/releases
+
+    - Identify the .whl file corresponding to the package variant that you want to install
+    - Continue with the instructions below to install AIMET from the .whl file
 
 6.2.2 Set the package details.
 
-.. parsed-literal::
+.. code-block:: bash
 
-    # Set the release tag, for example "|version|"
+    # Set the release tag, for example "1.34.0"
     export release_tag="<version release tag>"
 
     # Construct the download root URL
-    export download_url="\https://github.com/quic/aimet/releases/download/${release_tag}"
+    export download_url="https://github.com/quic/aimet/releases/download/${release_tag}"
 
     # Set the wheel file name with extension,
-    # for example "aimet_tensorflow-|version|.cu118-cp310-cp310-manylinux_2_34_x86_64.whl"
+    # for example "aimet_tensorflow-1.34.0.cu118-cp310-cp310-manylinux_2_34_x86_64.whl"
     export wheel_file_name="<wheel file name>"
 
     # NOTE: Do the following only for the PyTorch and ONNX variant packages!
     export find_pkg_url_str="-f https://download.pytorch.org/whl/torch_stable.html"
 
+
 6.2.3 Install the selected AIMET package.
 
 .. note::
-
+    
     Python dependencies are automatically installed.
 
 .. code-block:: bash
@@ -258,6 +297,7 @@ Releases are listed at: https://github.com/quic/aimet/releases
 
 .. _docker-install-setup:
 
+
 Environment setup
 =================
 
@@ -267,11 +307,13 @@ Environment setup
 
     source /usr/local/lib/python3.10/dist-packages/aimet_common/bin/envsetup.sh
 
+
 .. _docker-install-next:
+
 
 Next steps
 ==========
 
-See the :ref:`User guide <opt-guide-index>` to read about the model optimization workflow.
+See the :doc:`Quantization User Guide </user_guide/model_quantization>` for a discussion of how to use AIMET quantization.
 
-See the :ref:`Examples <examples-index>` to try AIMET quantization techniques on your pre-trained models.
+See the :doc:`Examples Documentation </user_guide/examples>` to try AIMET on example quantization and compression problems.
