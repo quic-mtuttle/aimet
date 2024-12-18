@@ -1,7 +1,8 @@
-#==============================================================================
+# -*- mode: python -*-
+# =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -32,39 +33,50 @@
 #  SPDX-License-Identifier: BSD-3-Clause
 #
 #  @@-COPYRIGHT-END-@@
-#==============================================================================
+# =============================================================================
+# pylint: disable=all
+import os
+import sysconfig
 
-add_subdirectory(src/python)
 
-if (ENABLE_TESTS)
-    add_subdirectory(test)
-endif()
+def main(output_dir):
+    try:
+        import torch
+    except ImportError:
+        torch = None
 
-add_custom_target(whl_prep_cp_common DEPENDS
-    whl_prep_cp_common_DlCompression
-    whl_prep_cp_common_DlEqualization
-    whl_prep_cp_common_DlQuantization
-    whl_prep_cp_common_PyModelOptimizations
-)
-add_dependencies(whl_prep_cp whl_prep_cp_common)
+    try:
+        import tensorflow as tf
+    except ImportError:
+        tf = None
 
-add_custom_target(whl_prep_ln_common DEPENDS
-    whl_prep_ln_common_DlCompression
-    whl_prep_ln_common_DlEqualization
-    whl_prep_ln_common_DlQuantization
-    whl_prep_ln_common_PyModelOptimizations
-)
+    try:
+        import onnx
+    except ImportError:
+        onnx = None
 
-add_custom_target(generate_deps
-    COMMAND python3
-            "${CMAKE_CURRENT_SOURCE_DIR}/src/python/aimet_common/_gen.py"
-            --output-dir ${CMAKE_BINARY_DIR}/artifacts/aimet_common
-)
-install(DIRECTORY ${CMAKE_BINARY_DIR}/artifacts/aimet_common/
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/python/aimet_common
-        FILES_MATCHING
-        PATTERN "_deps.py"
-      )
+    _template = os.path.join(os.path.dirname(__file__), "_deps.pyi")
 
-add_dependencies(whl_prep_ln whl_prep_ln_common)
-whl_add_whl_action_target(common)
+    with open(_template) as f:
+        copyright_string = [
+            line.strip() for line in f.readlines()
+            if line.startswith('#')
+        ]
+
+    content = [
+        # f"platform = '{...}'",
+        "torch = "      + (f"'{torch.__version__}'" if torch else "None"),
+        # "tensorflow = " + (f"'{tf.__version__}'" if tf else "None"),
+        # "onnx = "       + (f"'{onnx.__version__}'" if onnx else "None"),
+        ""
+    ]
+
+    with open(os.path.join(output_dir, "_deps.py"), "w") as f:
+        f.write('\n'.join(copyright_string + content))
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-dir", type=str)
+    args = parser.parse_args()
+    main(args.output_dir)

@@ -21,6 +21,6 @@ scikit-learn
 scipy
 setuptools
 tensorboard
-torch~=2.2.0
+torch
 torchvision
 tqdm
