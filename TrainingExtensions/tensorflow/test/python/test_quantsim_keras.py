@@ -1572,39 +1572,44 @@ def test_quantizable_lstm_export_encodings():
     timesteps = 10
     features = 16
     units = 32
+    kernel_1 = {'class_name': 'glorot_uniform', 'config': {'seed': 42}}
+    kernel_2 = {'class_name': 'glorot_uniform', 'config': {'seed': 43}}
+    recurrent_1 = {'class_name': 'orthogonal', 'config': {'seed': 44}}
+    recurrent_2 = {'class_name': 'orthogonal', 'config': {'seed': 45}}
 
     # STAGE 1 MODEL - Functional model created with layers.lstm
     stage_1_inputs = keras.Input(shape=(timesteps, features))
-    stage_1_output = keras.layers.LSTM(units, unroll=True)(stage_1_inputs)
+    stage_1_output = keras.layers.LSTM(units, unroll=True, kernel_initializer=kernel_1, recurrent_initializer=recurrent_1)(stage_1_inputs)
     stage_1_model = keras.Model(inputs=stage_1_inputs, outputs=stage_1_output)
     
     # STAGE 2 MODEL - Sequential model created with layers.lstm
     stage_2_model = keras.models.Sequential(
         [
-            keras.layers.LSTM(units, input_shape=(timesteps, features), unroll=True),
+            keras.layers.LSTM(units, input_shape=(timesteps, features), unroll=True, kernel_initializer=kernel_2, recurrent_initializer=recurrent_2),
         ]
     )
 
     rng = np.random.default_rng(seed=42)
     rn_input = rng.random([batch_size, timesteps, features])
 
-    # STAGE 3 MODEL - Quantized model created through QuantSim functional original
-    stage_3_model = QuantizationSimModel(stage_1_model)   
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # STAGE 3 MODEL - Quantized model created through QuantSim functional original
+        stage_3_model = QuantizationSimModel(stage_1_model)
 
-    stage_3_model.compute_encodings(lambda m, _: m(rn_input), None)
-    stage_3_model.export('./data', 'lstm_functional')
+        stage_3_model.compute_encodings(lambda m, _: m(rn_input), None)
+        stage_3_model.export(tmp_dir, 'lstm_functional')
 
-    # STAGE 4 MODEL - Quantized model created through QuantSim sequential original
-    stage_4_model = QuantizationSimModel(stage_2_model)
+        # STAGE 4 MODEL - Quantized model created through QuantSim sequential original
+        stage_4_model = QuantizationSimModel(stage_2_model)
+
+        stage_4_model.compute_encodings(lambda m, _: m(rn_input), None)
+        stage_4_model.export(tmp_dir, 'lstm_sequential')
    
-    stage_4_model.compute_encodings(lambda m, _: m(rn_input), None)
-    stage_4_model.export('./data', 'lstm_sequential')
-   
-    #Check QuantizationSimModel model created through originals
-    with open("./data/lstm_functional.encodings", "r") as encodings_file_functional, \
-        open("./data/lstm_sequential.encodings", "r") as encodings_file_sequential:
-        encodings_functional = json.load(encodings_file_functional)
-        encodings_sequential = json.load(encodings_file_sequential)
+        #Check QuantizationSimModel model created through originals
+        with open(Path(tmp_dir, "lstm_functional.encodings"), "r") as encodings_file_functional, \
+                open(Path(tmp_dir, "lstm_sequential.encodings"), "r") as encodings_file_sequential:
+            encodings_functional = json.load(encodings_file_functional)
+            encodings_sequential = json.load(encodings_file_sequential)
 
     for (model_layer, encodings) in (stage_3_model.model.layers[1], encodings_functional), (stage_4_model.model.layers[0], encodings_sequential):
         for wrapper in model_layer._wrapped_layers:
