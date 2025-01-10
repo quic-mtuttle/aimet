@@ -4,33 +4,41 @@
 Quick Start
 ###########
 
-This page describes how to quickly install the latest version of AIMET for PyTorch framework.
+This page describes how to quickly install the latest version of AIMET for the PyTorch framework.
 
-For all the framework variants and compute platform, see :ref:`Installation <install-index>`.
+For all the framework variants and compute platforms, see :ref:`Installation <install-index>`.
 
-Installation
-============
+.. _install-quick-start-platform:
 
-Type the following command to install AIMET for PyTorch framework using pip package manager.
+Tested platform
+===============
 
-.. code-block:: bash
-
-    python3 -m pip install aimet-torch
-
-AIMET PyTorch package has been tested using the following recommended host platform configuration:
+AIMET PyTorch 2.0 has been tested using the following recommended host platform configuration:
 
 * 64-bit Intel x86-compatible processor
-* Python 3.8–3.12
+* Python 3.8 – 3.10
 * Ubuntu 22.04
 * For GPU variants:
     * Nvidia GPU card (Compute capability 5.2 or later)
     * Nvidia driver version 455 or later (using the latest driver is recommended; both CUDA and cuDNN are supported)
 
-Verification
-============
+Installing AIMET
+================
 
-To confirm that AIMET PyTorch is installed correctly, you can verify the installation by executing the
-following sample code snippet.
+AIMET PyTorch 2.0 should run on any platform that supports PyTorch using Python 3.8 or later. See :ref:`above <install-quick-start-platform>` for information about tested platforms.
+
+Type the following command to install AIMET for the PyTorch framework using the pip package manager.
+
+.. code-block:: bash
+
+    python3 -m pip install aimet-torch
+
+Verifying the installation
+==========================
+
+To confirm that AIMET PyTorch is installed correctly, do the following.
+
+**Step 1:** Verify torch by executing the following sample code snippet.
 
 .. code-block:: python
 
@@ -38,7 +46,7 @@ following sample code snippet.
     x = torch.randn(100)
 
 
-Then instantiate 8-bit symmetric affine quantizer.
+**Step 2:** Verify AIMET PyTorch by instantiating an 8-bit symmetric affine quantizer.
 
 .. code-block:: python
 
@@ -65,20 +73,20 @@ The quantized output should be something similar to the one shown below.
                 -116., -128.,   42.,  -64.,  -58.,  -88.,  -72.,  127.,  -35.,   68.,
                  -63.,  -28.,   14.,   -1., -128.,  -27.,  -91.,  -77.,   56.,  127.])
 
-Quick example
-=============
+Running a quick example
+=======================
 
 Next, using :mod:`aimet_torch` for the MobileNetV2 network, create a :class:`QuantizationSimModel`, perform calibration,
-and then evaluate it:
+and then evaluate it.
 
-**Step 1**: Let's handle necessary imports and other setup.
+**Step 1:** Handle imports and other setup.
 
 .. literalinclude:: ../snippets/torch/installation_verification.py
             :language: python
             :start-after: # [step_1]
             :end-before: # End of [step_1]
 
-**Step 2**: We will create :class:`QuantizationSimModel` and ensure the model contains quantization operations.
+**Step 2:** Create a :class:`QuantizationSimModel` and ensure the model contains quantization operations.
 
 .. literalinclude:: ../snippets/torch/installation_verification.py
             :language: python
@@ -90,7 +98,7 @@ The model should be composed of Quantized :class:`nn.Modules`, similar to the ou
 .. rst-class:: script-output
 
     .. code-block:: none
-   
+  
         MobileNetV2(
         (features): Sequential(
         (0): Conv2dNormActivation(
@@ -110,14 +118,14 @@ The model should be composed of Quantized :class:`nn.Modules`, similar to the ou
         ...
         )
 
-**Step 3**: We perform calibration. As a proof of concept, random input is being passed in. However, calibration should be performed using a representative dataset in real world cases.
+**Step 3:** Calibrate the model. This example uses random values as input. In real-world cases, calibration should be performed using a representative dataset.
 
 .. literalinclude:: ../snippets/torch/installation_verification.py
             :language: python
             :start-after: # [step_3]
             :end-before: # End of [step_3]
 
-**Step 4**: We perform evaluation.
+**Step 4:** Evaluate the model.
 
 .. literalinclude:: ../snippets/torch/installation_verification.py
             :language: python
