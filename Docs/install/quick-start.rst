@@ -1,8 +1,8 @@
 .. _install-quick-start:
 
-###########
-Quick Start
-###########
+#####################
+Quick Start (PyTorch)
+#####################
 
 This page describes how to quickly install the latest version of AIMET for the PyTorch framework.
 
@@ -13,10 +13,10 @@ For all the framework variants and compute platforms, see :ref:`Installation <in
 Tested platform
 ===============
 
-AIMET PyTorch 2.0 has been tested using the following recommended host platform configuration:
+aimet_torch 2 has been tested using the following host platform configuration:
 
 * 64-bit Intel x86-compatible processor
-* Python 3.8 – 3.10
+* Python 3.10
 * Ubuntu 22.04
 * For GPU variants:
     * Nvidia GPU card (Compute capability 5.2 or later)
@@ -25,7 +25,10 @@ AIMET PyTorch 2.0 has been tested using the following recommended host platform 
 Installing AIMET
 ================
 
-AIMET PyTorch 2.0 should run on any platform that supports PyTorch using Python 3.8 or later. See :ref:`above <install-quick-start-platform>` for information about tested platforms.
+.. note::
+    aimet_torch 2 should run on any platform that supports PyTorch using Python 3.8 or later.
+
+    See :ref:`tested platform <install-quick-start-platform>` for information about tested host platform configuration.
 
 Type the following command to install AIMET for the PyTorch framework using the pip package manager.
 
@@ -46,7 +49,7 @@ To confirm that AIMET PyTorch is installed correctly, do the following.
     x = torch.randn(100)
 
 
-**Step 2:** Verify AIMET PyTorch by instantiating an 8-bit symmetric affine quantizer.
+**Step 2:** Verify AIMET PyTorch by instantiating an 8-bit symmetric quantizer.
 
 .. code-block:: python
 
@@ -56,7 +59,7 @@ To confirm that AIMET PyTorch is installed correctly, do the following.
     out = Q.affine.quantize(x, scale, offset, qmin=-128, qmax=127)
     print(out)
 
-The quantized output should be something similar to the one shown below.
+The quantized output should be similar to the one shown below.
 
 .. rst-class:: script-output
 
