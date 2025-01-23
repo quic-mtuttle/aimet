@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-  "scikit-build-core[wheels]>=0.9",
+  "scikit-build-core[wheels]>=0.10",
 ]
 build-backend = "scikit_build_core.build"
 
@@ -12,11 +12,21 @@ dynamic = ["name", "dependencies", "version"]
 [project.optional-dependencies]
 dev = [
   # duplicate build-system.requires for editable mode (non-isolated)
-  "scikit-build-core[wheels]>=0.9",
+  "scikit-build-core[wheels]>=0.10",
   # and the rest
 ]
 test = [
+  "beautifulsoup4",
+  "deepspeed",
+  "matplotlib",
+  "onnxruntime",
+  "peft",
   "pytest",
+  "pytest-github-report",
+  "pytorch-ignite",
+  "safetensors",
+  "spconv",
+  "transformers",
 ]
 docs = [
 ]
@@ -31,10 +41,16 @@ sdist.cmake = false
 logging.level = "DEBUG"
 strict-config = false
 wheel.license-files=[]
-wheel.packages=["TrainingExtensions/common/src/python/aimet_common"]
+wheel.packages=[]
 
 [tool.scikit-build.cmake.define]
 CMAKE_BUILD_TYPE="RelWithDebInfo"
 CMAKE_CUDA_ARCHITECTURES="70;75;80"
 CMAKE_CUDA_FLAGS="--threads=8"
 
+[tool.pytest.ini_options]
+xfail_strict = true
+addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config", "-m", "not cuda"]
+markers = [
+    "cuda: test that require CUDA to be installed",
+]
