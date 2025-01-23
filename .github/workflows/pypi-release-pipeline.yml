@@ -1,0 +1,236 @@
+name: Fast Release Biweekly Release CI/CD Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-branch:
+        description: "Release branch to target on pipeline"
+        required: true
+        type: string
+      release-version:
+        description: "Release version to build"
+        required: true
+        type: string
+      deploy:
+        description: "Deploy to official pypi if true"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build-test-pypi-whl:
+    if: github.server_url != 'https://github.com'
+    name: Build AIMET test-pypi wheel
+    runs-on: k8s-gpu
+    env:
+      AIMET_VARIANT: torch-gpu
+      FAST_RELEASE: true
+      VERSION: ${{ inputs.release-version }}
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: "${{ vars.DOCKER_REGISTRY }}/${{ vars.DOCKER_IMAGE }}torch:fast-release-latest"
+      credentials:
+        username: ${{ secrets.DOCKER_LOGIN }}
+        password: ${{ secrets.DOCKER_CREDENTIALS }}
+    outputs:
+      version: ${{ steps.version.outputs.dev_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release-branch }}
+ 
+      - name: Install Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install python3 python3-pip -y
+          python3 -m pip install --upgrade pip
+          python3 -m pip install twine
+ 
+      - name: Format dev version
+        id: version
+        run: |
+          AVAILABLE_VERSION=$(pip index versions aimet-torch --index-url https://test.pypi.org/simple/ --pre 2>/dev/null | grep -oP '\d+\.\d+\.\d+\.dev\d+' | head -n 1)
+          LATEST_VERSION=$(pip index versions aimet-torch --index-url https://test.pypi.org/simple/ 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -n 1)
+          if [[ $LATEST_VERSION == *${{ env.VERSION }}* ]]; then
+            if [ -z "$AVAILABLE_VERSION" ]; then
+              DEV_VER=${{ env.VERSION }}.dev1;
+            else
+              DEV_VER=${{ env.VERSION }}.dev$(echo $AVAILABLE_VERSION | awk -F. '{print $NF}' | grep -oE '[0-9]+' | awk '{print $1+1}');
+            fi
+          else
+            DEV_VER=${{ env.VERSION }}.dev$(echo $AVAILABLE_VERSION | awk -F. '{print $NF}' | grep -oE '[0-9]+' | awk '{print $1+1}');
+          fi
+          echo "Latest available dev version: $AVAILABLE_VERSION"
+          echo "Formatting Dev Version: $DEV_VER"
+          echo "AVAILABLE_VERSION=$AVAILABLE_VERSION" >> $GITHUB_ENV
+          echo "DEV_VER=$DEV_VER" >> $GITHUB_ENV
+          echo "dev_version=$DEV_VER" >> $GITHUB_OUTPUT
+ 
+      - name: Make the Pypi Wheel
+        run: |
+          mkdir -p build/staging/universal
+          cmake -S . -B ./build -DENABLE_CUDA=ON -DENABLE_TORCH=ON -DENABLE_TENSORFLOW=OFF -DENABLE_ONNX=OFF -DPIP_INDEX=pypi -DSW_VERSION=${{ env.DEV_VER }} -DCMAKE_INSTALL_PREFIX="build/staging/universal"
+          cmake --build ./build --parallel 4 --target all --target install --target packageaimet --target upload
+          find . -name *.whl
+          echo "Retag the whl file"
+          WHL_PATH=$(pwd)/$(find . -name *.whl -printf '%P\n')
+          echo "WHL_PATH=$(pwd)/$(find . -name *.whl -printf '%P\n')" >> $GITHUB_ENV
+          wheel tags --python-tag=py38 --abi-tag=none --platform-tag=any $WHL_PATH
+          ls -al build/packaging/dist
+  
+      - name: Push to test-pypi
+        run: |
+          twine upload --verbose --repository testpypi --config-file ~/.pypirc build/packaging/dist/*
+
+      - name: Verify the package is available
+        run: |
+          while true; do
+          sleep 10
+            HEAD_VERSION=$(pip index versions aimet-torch --index-url https://test.pypi.org/simple/ --pre 2>/dev/null | grep -oP '\d+\.\d+\.\d+\.dev\d+' | head -n 1)
+            if [[ "$HEAD_VERSION" == "$DEV_VER" ]]; then
+              echo "uploaded $DEV_VER"
+              break
+            else
+              echo "upload pending..."
+              sleep 10
+            fi
+          done
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: aimet-torch-${{ env.DEV_VER }}
+          path: ${{ env.WHL_PATH }}
+          if-no-files-found: error
+          retention-days: 1d
+
+  pypi-unit-tests:
+    if: github.server_url != 'https://github.com'
+    name: AIMET Pypi Unit Test
+    runs-on: k8s-gpu
+    needs: [build-test-pypi-whl]
+    env:
+      pytest_github_report: true
+      pytest_use_zeros: true
+      BUILD_VERSION: ${{ needs.build-test-pypi-whl.outputs.version }}
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: "${{ vars.DOCKER_REGISTRY_TMP }}/nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04"
+      credentials:
+        username: ${{ secrets.DOCKER_LOGIN }}
+        password: ${{ secrets.DOCKER_CREDENTIALS }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release-branch }}
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: aimet-torch-${{ env.BUILD_VERSION }}
+          path: .
+
+      - name: Install Tools
+        run: |
+          apt-get update
+          apt-get install python3 python3-pip -y
+          python3 -m pip install --upgrade pip
+          python3 -m pip install aimet_torch-*.whl
+          python3 -m pip install bs4 deepspeed onnxruntime peft pytest spconv transformers torch==2.2.2 torchvision==0.17.2
+          python3 -m pip install pytorch-ignite --no-dependencies
+      - name: Run Unit Tests
+        run: pytest TrainingExtensions/torch/test/python/
+
+  pypi-acceptance-tests:
+    if: github.server_url != 'https://github.com'
+    name: AIMET Pypi Acceptance Tests
+    runs-on: k8s-gpu
+    needs: [build-test-pypi-whl]
+    env:
+      pytest_github_report: true
+      pytest_use_zeros: true
+      DEPENDENCY_DATA_PATH: /data
+      BUILD_VERSION: ${{ needs.build-test-pypi-whl.outputs.version }}
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: "${{ vars.DOCKER_REGISTRY_TMP }}/nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04"
+      credentials:
+        username: ${{ secrets.DOCKER_LOGIN }}
+        password: ${{ secrets.DOCKER_CREDENTIALS }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release-branch }}
+      - uses: actions/download-artifact@v2
+        with:
+          name: aimet-torch-${{ env.BUILD_VERSION }}
+          path: .
+      - name: Install Tools
+        run: | 
+          apt-get update
+          apt-get install python3 python3-pip -y
+          python3 -m pip install --upgrade pip
+          python3 -m pip install aimet_torch-*.whl
+          python3 -m pip install bs4 deepspeed==0.15.2 onnxruntime peft pytest safetensors spconv transformers==4.27.4 torch==2.2.2 torchvision==0.17.2 wget
+          python3 -m pip install pytorch-ignite --no-dependencies
+      - name: Verify Dependency Data
+        run: python3 NightlyTests/torch/dependencies.py NightlyTests/torch/resnet18_eval_scores.csv True
+      - name: Run Acceptance Tests
+        run: pytest NightlyTests/torch/
+
+  build-pypi-whl:
+    if: github.server_url != 'https://github.com'
+    name: Promote AIMET pypi wheel
+    runs-on: k8s-gpu
+    needs: [build-test-pypi-whl, pypi-unit-tests, pypi-acceptance-tests]
+    env:
+      AIMET_VARIANT: torch-gpu
+      FAST_RELEASE: true
+      VERSION: ${{ inputs.release-version }}
+      BUILD_VERSION: ${{ needs.build-test-pypi-whl.outputs.version }}
+      DEPLOY: ${{ inputs.deploy }}
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: "${{ vars.DOCKER_REGISTRY }}/${{ vars.DOCKER_IMAGE }}torch:fast-release-latest"
+      credentials:
+        username: ${{ secrets.DOCKER_LOGIN }}
+        password: ${{ secrets.DOCKER_CREDENTIALS }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release-branch }}
+
+      - name: Make the Pypi Wheel
+        run: |
+          mkdir -p build/staging/universal
+          cmake -S . -B ./build -DENABLE_CUDA=ON -DENABLE_TORCH=ON -DENABLE_TENSORFLOW=OFF -DENABLE_ONNX=OFF -DPIP_INDEX=pypi -DSW_VERSION=${{ env.VERSION }} -DCMAKE_INSTALL_PREFIX="build/staging/universal"
+          cmake --build ./build --parallel 4 --target all --target install --target packageaimet --target upload
+          echo "Retag the whl file"
+          WHL_PATH=$(pwd)/$(find . -name *.whl -printf '%P\n')
+          echo "WHL_PATH=$(pwd)/$(find . -name *.whl -printf '%P\n')" >> $GITHUB_ENV
+          wheel tags --python-tag=py38 --abi-tag=none --platform-tag=any $WHL_PATH
+          find . -name *.whl
+
+      - name: Install Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install python3 python3-pip -y
+          python3 -m pip install --upgrade pip
+          python3 -m pip install twine
+
+      - name: Push to pypi 
+        run: |
+          case $DEPLOY in
+            (true) 
+                   echo "Deploy variable set to true, deploying. . . "
+                   twine upload --verbose --repository pypi --config-file ~/.pypirc build/packaging/dist/* ;;
+            (false) 
+                   echo "Deploy variable is false, deployment for twine upload --verbose --repository pypi --config-file ~/.pypirc build/packaging/dist/* will not proceed." ;;
+          esac
+

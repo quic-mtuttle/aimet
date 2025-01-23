@@ -37,7 +37,7 @@
 # Docker image file to build and test AIMET for Tensorflow in a GPU environment
 
 ARG REGISTRY
-FROM ${REGISTRY}nvidia/cuda:12.0.0-cudnn8-devel-ubuntu22.04
+FROM ${REGISTRY}nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=DontWarn
@@ -67,15 +67,8 @@ RUN apt-get update > /dev/null && \
         xauth > /dev/null && \
         rm -rf /var/lib/apt/lists/*
 
-# Install certificates
+## Install certificates
 RUN sudo update-ca-certificates
-
-# Modified version of bash.bashrc that adjusts the prompt
-### COPY bash.bashrc /etc/
-### RUN chmod 644 /etc/bash.bashrc
-
-### COPY profile.global /usr/local/etc/
-### RUN chmod 555 /usr/local/etc/profile.global
 
 # Add sudo support
 RUN echo "%users ALL = (ALL) NOPASSWD: ALL" >> /etc/sudoers
@@ -212,3 +205,4 @@ RUN python3 -m pip --no-cache-dir install \
     sphinx-rtd-theme \
     sphinx-tabs \
     torch==2.2
+
