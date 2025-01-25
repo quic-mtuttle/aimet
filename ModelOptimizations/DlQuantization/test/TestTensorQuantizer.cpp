@@ -189,8 +189,7 @@ TEST_F(TestTensorQuantizer, SanityTestComputeEncodingFromDataSymmetricTFBlocked)
     tensorQuantizer.updateStats(paramTensor.data(), tensorShape, false);\
     ASSERT_TRUE(tensorQuantizer.hasValidStats());
     ASSERT_FALSE(tensorQuantizer.isEncodingValid);
-    TfEncoding encoding = tensorQuantizer.computeEncoding(true)[0];
-    ASSERT_TRUE(tensorQuantizer.isEncodingValid);
+    auto encoding = tensorQuantizer.computeEncodings(true)[0];
 
     float expected_max = std::max(std::abs(*std::min_element(paramTensor.begin(), paramTensor.end())),
                                   std::abs(*std::max_element(paramTensor.begin(), paramTensor.end())));
@@ -331,7 +330,7 @@ TEST_F(TestTensorQuantizer, SANITY_GeneratePerChannelParamsBlocked)
 {
     BlockTensorQuantizer tensorQuantizer({3, 1, 1}, 8, QUANTIZATION_TF);
     tensorQuantizer.updateStats(data1.data(), {2, 3, 2, 2}, false);
-    auto encodings = tensorQuantizer.computeEncoding(false);
+    auto encodings = tensorQuantizer.computeEncodings(false);
 
     std::vector<TfEncoding> expectedEncodings(3);
     expectedEncodings[0] = getTfEncoding(0, 15, 8);
@@ -475,10 +474,11 @@ TEST_F(TestTensorQuantizer, SANITY_QuantizeDequantizePerChannelTensorBlocked)
         9.94706,  10.5059,  10.9529,  11.5118,  11.9588,  12.5176,  12.9647,  13.5235,  13.9706,  14.5294};
 
     tensorQuantizer.updateStats(this->data2.data(), tensorShape, false);
-    auto encodings = tensorQuantizer.computeEncoding(false);
+    auto encodings = tensorQuantizer.computeEncodings(false);
+    tensorQuantizer.setEncodings(encodings);
 
     std::vector<float> params_quantized(this->data2.size());
-    tensorQuantizer.quantizeDequantize(this->data2.data(), params_quantized.data(), encodings, tensorShape, false);
+    tensorQuantizer.quantizeDequantize(this->data2.data(), params_quantized.data(), tensorShape, false);
 
     ASSERT_EQ(encodings.size(), expectedEncodings.size());
     for (uint32_t i = 0; i < encodings.size(); ++i)
@@ -732,7 +732,8 @@ TEST_F(TestTensorQuantizer, SanityTestGpuBlocked)
     tensorQuantizer.setUnsignedSymmetric(false);
     tensorQuantizer.updateStats(statsTensorBlob.getDataPtrOnDevice(), tensorShape, true);
     EXPECT_FALSE(tensorQuantizer.isEncodingValid);
-    auto encodings = tensorQuantizer.computeEncoding(false);
+    auto encodings = tensorQuantizer.computeEncodings(false);
+    tensorQuantizer.setEncodings(encodings);
     TfEncoding encoding = encodings[0];
     EXPECT_TRUE(tensorQuantizer.isEncodingValid);
 
@@ -743,7 +744,7 @@ TEST_F(TestTensorQuantizer, SanityTestGpuBlocked)
     Blob<GpuDevice<float>> quantTensorBlob(quantizedTensor.data(), tensorCount);
 
     tensorQuantizer.quantizeDequantize(inputTensorBlob.getDataPtrOnDevice(), quantTensorBlob.getDataPtrOnDevice(),
-                                       encodings, tensorShape, true);
+                                       tensorShape, true);
 
     double MAX = *std::max_element(statsTensor.begin(), statsTensor.end());
     double MIN = *std::min_element(statsTensor.begin(), statsTensor.end());
@@ -779,7 +780,7 @@ TYPED_TEST(TestBlockQuantizerCpuGpu, TestBlockQuantizerPerTensorQdq)
     float offset = min / delta;
     int bw = 8;
     encodings[0] = {min, max, delta, offset, bw};
-    tensorQuantizer.isEncodingValid = true;
+    tensorQuantizer.setEncodings(encodings);
 
     DataType input[6] = {-7, -5, -3, 0, .1, 2.5};
     DataType output[6];
@@ -788,7 +789,7 @@ TYPED_TEST(TestBlockQuantizerCpuGpu, TestBlockQuantizerPerTensorQdq)
     Blob<TypeParam> outputBlob(output, 6);
     bool useCuda = TypeParam::modeCpuGpu == COMP_MODE_GPU;
     tensorQuantizer.quantizeDequantize(inputBlob.getDataPtrOnDevice(), outputBlob.getDataPtrOnDevice(),
-                                   encodings, {6, 1}, useCuda);
+                                       {6, 1}, useCuda);
 
     for (int i = 0; i < 6; i++)
     {
@@ -823,7 +824,8 @@ TYPED_TEST(TestBlockQuantizerCpuGpu, TestBlockQuantizationEndToEnd)
     Blob<TypeParam> outputBlob(out, numElements);
     bool useCuda = TypeParam::modeCpuGpu == COMP_MODE_GPU;
     tensorQuantizer.updateStats(inputBlob.getDataPtrOnDevice(), inputShape, useCuda);
-    auto encodings = tensorQuantizer.computeEncoding(symmetric);
+    auto encodings = tensorQuantizer.computeEncodings(symmetric);
+    tensorQuantizer.setEncodings(encodings);
 
     DataType expectedMax[4] = {10.f, 23.1f, 10.f, .3f};
     for (size_t i = 0; i < 4; i++)
@@ -836,7 +838,7 @@ TYPED_TEST(TestBlockQuantizerCpuGpu, TestBlockQuantizationEndToEnd)
     }
 
     tensorQuantizer.quantizeDequantize(inputBlob.getDataPtrOnDevice(), outputBlob.getDataPtrOnDevice(),
-                                       encodings, inputShape, useCuda);
+                                       inputShape, useCuda);
 
     for (int i = 0; i < numElements; i++)
     {

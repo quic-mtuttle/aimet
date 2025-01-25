@@ -275,7 +275,7 @@ public:
     BlockTensorQuantizer(TensorDims shape, int bitwidth, QuantizationMode quantScheme);
 
     // TODO: Remove symmetric arg, use this->_symmetric
-    std::vector<TfEncoding> computeEncoding(bool useSymmetricEncodings);
+    Encodings computeEncodings(bool useSymmetricEncodings) const;
 
     /**
      * Reset stats being collected to compute encoding
@@ -287,14 +287,13 @@ public:
      *
      * @param input Input tensor
      * @param output Output tensor
-     * @param encodings Encodings to use for quantization
      * @param tensorShape Shape of the input tensor
      * @param output Output tensor
      * @param useCuda If true, both the input and output tensors are assumed to be in CUDA memory
      * @param stream Cuda stream to use for GPU kernels
      */
-    void quantizeDequantize(const float* input, float* output, Encodings encodings, const TensorDims& tensorShape,
-                            bool useCuda, void* stream = nullptr);
+    void quantizeDequantize(const float* input, float* output, const TensorDims& tensorShape, bool useCuda,
+                            void* stream = nullptr) const;
 
     /**
      * Update stats being collected to compute encoding
@@ -317,13 +316,13 @@ public:
      * gets quantScheme configured for this Tensor Quantizer
      * @return quantScheme as QuantizationMode
      */
-    QuantizationMode getQuantScheme();
+    QuantizationMode getQuantScheme() const;
 
     /**
      * gets strict symmetric flag configured for this Tensor Quantizer
      * @return quantScheme as QuantizationMode
      */
-    bool getStrictSymmetric();
+    bool getStrictSymmetric() const;
 
     /**
      * sets strict symmetric flag
@@ -335,7 +334,7 @@ public:
      * gets unsigned symmetric flag config for this Tensor Quantizer
      * @return bool, True if unsigned symmetric mode, False otherwise
      */
-    bool getUnsignedSymmetric();
+    bool getUnsignedSymmetric() const;
 
     /**
      * sets unsigned symmetric flag
@@ -351,7 +350,7 @@ public:
      * of two values - the float value representing the left edge of the bucket and a PDF of the values in this bucket
      * relative to all the values seen across all buckets
      */
-    std::vector<std::vector<std::tuple<double, double>>> getStatsHistogram();
+    std::vector<std::vector<std::tuple<double, double>>> getStatsHistogram() const;
 
     /**
      * @brief Sets the specified percentile value for the encoding analyzer
@@ -365,21 +364,24 @@ public:
      *
      * @return Percentile value of the encoding analyzer.
      */
-    float getPercentileValue();
+    float getPercentileValue() const;
 
-    inline bool hasValidStats()
+    bool hasValidStats()
     {
         return _validStats;
     }
 
-    inline TensorDims getShape()
+    TensorDims getShape()
     {
         return _shape;
     }
 
-    // Encodings getEncodings();
+    Encodings getEncodings()
+    {
+        return _encodings;
+    }
 
-    // void setEncodings(Encodings encodings);
+    void setEncodings(const Encodings& encodings);
 
     bool isEncodingValid;
     int bitwidth;
@@ -390,6 +392,7 @@ private:
     bool _useUnsignedSymmetric;   // TODO: Remove
     bool _symmetric;
     bool _validStats;   // TODO: Move to EncodingAnalyzer
+    Encodings _encodings;
     std::unique_ptr<IBlockEncodingAnalyzer<float>> _encodingAnalyzer;
     TensorDims _shape;
 };

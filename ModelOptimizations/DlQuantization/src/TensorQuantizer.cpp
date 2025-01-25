@@ -351,9 +351,11 @@ BlockTensorQuantizer::BlockTensorQuantizer(TensorDims shape, int bitwidth, Quant
     _quantScheme(quantScheme),
     _useStrictSymmetric(false),
     _useUnsignedSymmetric(false),
+    _symmetric(false),
     _validStats(false),
     _shape(shape)
 {
+    _encodings.resize(getNumel(shape));
     _encodingAnalyzer = getBlockEncodingAnalyzerInstance<float>(quantScheme, shape);
 }
 
@@ -375,23 +377,23 @@ void BlockTensorQuantizer::updateStats(const float* tensor, const TensorDims& te
 
 
 // TODO: Let BlockTensorQuantizer own the encodings vector, do not take as argument
-void BlockTensorQuantizer::quantizeDequantize(const float* input, float* output, Encodings encodings,
-                                              const TensorDims& tensorShape, bool useCuda, void* stream)
+void BlockTensorQuantizer::quantizeDequantize(const float* input, float* output, const TensorDims& tensorShape,
+                                              bool useCuda, void* stream) const
 {
     auto mode = useCuda ? COMP_MODE_GPU : COMP_MODE_CPU;
     if (not isEncodingValid)
     {
         throw std::runtime_error("Cannot perform quantization before computing encodings");
     }
-    if (encodings.size() == 1)
+    if (getNumel(_shape) == 1)
     {
         // More efficient per-tensor quantization impl which avoids separate cudaMemcpy for encodings
-        DlQuantization::quantizeDequantize(input, getNumel(tensorShape), encodings[0], output, mode, ROUND_NEAREST,
+        DlQuantization::quantizeDequantize(input, getNumel(tensorShape), _encodings[0], output, mode, ROUND_NEAREST,
                                            stream);
     }
     else
     {
-        quantizeDequantizeBroadcast(input, output, encodings, tensorShape, this->_shape, mode, stream);
+        quantizeDequantizeBroadcast(input, output, _encodings, tensorShape, this->_shape, mode, stream);
     }
 }
 
@@ -405,12 +407,12 @@ void BlockTensorQuantizer::setQuantScheme(QuantizationMode quantScheme)
     resetEncodingStats();
 }
 
-QuantizationMode BlockTensorQuantizer::getQuantScheme()
+QuantizationMode BlockTensorQuantizer::getQuantScheme() const
 {
     return _quantScheme;
 }
 
-bool BlockTensorQuantizer::getStrictSymmetric()
+bool BlockTensorQuantizer::getStrictSymmetric() const
 {
     return _useStrictSymmetric;
 }
@@ -421,7 +423,7 @@ void BlockTensorQuantizer::setStrictSymmetric(bool useStrictSymmetric)
     _useStrictSymmetric = useStrictSymmetric;
 }
 
-bool BlockTensorQuantizer::getUnsignedSymmetric()
+bool BlockTensorQuantizer::getUnsignedSymmetric() const
 {
     return _useUnsignedSymmetric;
 }
@@ -432,7 +434,7 @@ void BlockTensorQuantizer::setUnsignedSymmetric(bool useUnsignedsymmetric)
     _useUnsignedSymmetric = useUnsignedsymmetric;
 }
 
-std::vector<std::vector<std::tuple<double, double>>> BlockTensorQuantizer::getStatsHistogram()
+std::vector<std::vector<std::tuple<double, double>>> BlockTensorQuantizer::getStatsHistogram() const
 {
     return _encodingAnalyzer->getStatsHistogram();
 }
@@ -442,21 +444,29 @@ void BlockTensorQuantizer::setPercentileValue(float percentile)
     _encodingAnalyzer->setPercentileValue(percentile);
 }
 
-float BlockTensorQuantizer::getPercentileValue()
+float BlockTensorQuantizer::getPercentileValue() const
 {
     return _encodingAnalyzer->getPercentileValue();
 }
 
-std::vector<TfEncoding> BlockTensorQuantizer::computeEncoding(bool useSymmetricEncodings)
+Encodings BlockTensorQuantizer::computeEncodings(bool useSymmetricEncodings) const
 {
     // TODO: Move this flag/check to encoding analyzer
     if (not _validStats)
     {
         throw std::runtime_error("Cannot compute encodings before updating stats");
     }
+    return _encodingAnalyzer->computeEncoding(bitwidth, useSymmetricEncodings, _useStrictSymmetric, _useUnsignedSymmetric);
+}
+
+void BlockTensorQuantizer::setEncodings(const Encodings& encodings)
+{
+    if (encodings.size() != getNumel(_shape))
+    {
+        throw std::runtime_error("Length of encoding vector did not match BlockTensorQuantizer shape");
+    }
     isEncodingValid = true;
-    return _encodingAnalyzer->computeEncoding(bitwidth, useSymmetricEncodings, _useStrictSymmetric,
-                                              _useUnsignedSymmetric);
+    _encodings      = encodings;
 }
 
 }   // namespace DlQuantization

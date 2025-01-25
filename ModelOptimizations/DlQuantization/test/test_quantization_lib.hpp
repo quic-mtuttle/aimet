@@ -64,6 +64,8 @@ struct CpuDevice
 
 typedef ::testing::Types<CpuDevice<float>, CpuDevice<double> > TestDataTypesAndDevices;
 
+typedef ::testing::Types<CpuDevice<float> > TestDeviceTypes;
+
 #else
 
 template <typename DataType>
@@ -76,7 +78,7 @@ struct GpuDevice
 typedef ::testing::Types<CpuDevice<float>, CpuDevice<double>, GpuDevice<float>, GpuDevice<double> >
     TestDataTypesAndDevices;
 
-typedef ::testing::Types<GpuDevice<float>, GpuDevice<float> >
+typedef ::testing::Types<CpuDevice<float>, GpuDevice<float> >
     TestDeviceTypes;
 
 #endif
