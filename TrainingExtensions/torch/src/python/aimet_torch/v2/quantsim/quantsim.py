@@ -41,9 +41,14 @@ from typing import Union, Tuple, Optional, Sequence, TypeVar, Any, Callable, ove
 import warnings
 import itertools
 import io
+import json
 import contextlib
+import os
+import tempfile
 import torch
+import onnx
 
+from aimet_common import quantsim
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_torch._base.quantsim import (
     _QuantizationSimModelBase,
@@ -54,6 +59,7 @@ from aimet_torch._base.quantsim import (
     save_checkpoint,
     load_checkpoint,
     check_accumulator_overflow,
+    _QuantizedModuleProtocol,
 )
 from aimet_torch.v2 import nn as aimet_nn
 from aimet_torch.v2.nn import BaseQuantizationMixin, QuantizationMixin
@@ -66,6 +72,7 @@ from aimet_torch.v2.utils import patch_attr
 from aimet_torch import utils
 from aimet_torch.utils import deprecated, _red
 from aimet_torch.v2.deepspeed_utils import _register_zero3_forward_hooks
+from aimet_torch.v2.experimental.onnx._export import remove_quantization_nodes_from_onnx_graph, export
 
 __all__ = [
     'QuantizationSimModel',
@@ -295,6 +302,9 @@ class QuantizationSimModel(_QuantizationSimModelBase):
             # Set quantization parameters to the device of the original module
             module.to(device=device)
 
+        # Class instantiation for supporting sim.onnx.export()
+        self.onnx = _QuantizationSimOnnxExport(self)
+
     @overload
     def compute_encodings(self, forward_pass_callback: Callable[[torch.nn.Module], Any]): # pylint: disable=arguments-differ
         ...
@@ -470,13 +480,15 @@ class QuantizationSimModel(_QuantizationSimModelBase):
 
         :param model: The PyTorch model whose parameters will be quant-dequantized.
         """
+        stack = contextlib.ExitStack()
         for module in model.modules():
             if isinstance(module, BaseQuantizationMixin):
                 # pylint: disable=protected-access
-                module._patch_quantized_parameters()
+                stack.enter_context(module._patch_quantized_parameters())
                 if isinstance(module, QuantizationMixin):
-                    module._patch_dequantized_parameters()
-                cls._update_parameters_by_attr(module)
+                    stack.enter_context(module._patch_dequantized_parameters())
+                stack.enter_context(cls._update_parameters_by_attr(module))
+        return stack
 
     def named_qmodules(self):
         """Generator that yields all quantized modules in the model and their names
@@ -535,6 +547,101 @@ class QuantizationSimModel(_QuantizationSimModelBase):
             # Recursively call children modules if present
             if not utils.is_leaf_module(module):
                 cls._remove_quantization_wrappers(module, list_of_modules_to_exclude)
+
+class _QuantizationSimOnnxExport:
+    """
+    Helper class for exporting quantized models to ONNX format.
+    This class is used by the QuantizationSimModel.onnx.export() method.
+    """
+    def __init__(self, sim):
+        self.sim = sim
+
+    def export(self,
+               args: Union[Tuple[Any, ...], torch.Tensor],
+               f: Union[str, io.BytesIO],
+               *posargs, **kwargs):
+        """
+        This method exports out the quant-sim model so it is ready to be run on-target and
+        takes the same arguments as torch.onnx.export()
+
+        Specifically, the following are saved:
+
+        1. An equivalent model in ONNX format without any simulation ops
+        2. The quantization encodings are exported to a separate JSON-formatted file that can
+           then be imported by the on-target runtime (if desired)
+
+        :param args: Dummy input to the model. Used to export model to ONNX format.
+        :param f: file object or path where to store exported ONNX mode
+        """
+        # pylint: disable=too-many-locals, too-many-branches, protected-access
+        if self._has_non_affine_quantizer(self.sim.model):
+            raise RuntimeError("Export using onnx only export only supports affine quantizers. "
+                               "Other quantizer types are not supported.")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.sim._apply_qdq_to_model_parameters(self.sim.model):
+                tmp_onnx_path = os.path.join(tmp_dir, "quantized_model.onnx")
+                export(self.sim.model, args, tmp_onnx_path, *posargs, **kwargs)
+                onnx_model = onnx.load(tmp_onnx_path)
+
+        tensor_to_encoding_map = remove_quantization_nodes_from_onnx_graph(onnx_model)
+        onnx.save(onnx_model, f)
+
+        param_names = []
+        param_encodings = {}
+        activation_encodings = {}
+
+        for layer_name, layer in self.sim.model.named_modules():
+            if not isinstance(layer, self.sim._quantized_modules):
+                continue
+
+            if isinstance(layer, _QuantizedModuleProtocol) and isinstance(layer.get_original_module(), utils.DROPOUT_TYPES):
+                continue
+
+            for param_name, quantizer in layer.param_quantizers.items():
+                if quantizer:
+                    param_names.append(f"{layer_name}.{param_name}")
+
+        for tensor, encoding in tensor_to_encoding_map.items():
+            qnn_encoding = encoding.to_qnn_encoding_dict(encoding_version=quantsim.encoding_version)
+            if tensor in param_names:
+                param_encodings[tensor] = qnn_encoding
+            else:
+                activation_encodings[tensor] = qnn_encoding
+
+        # Postprocessing for 1.0.0 export
+        if quantsim.encoding_version != "0.6.1":
+            param_encodings = [
+                {"name": tensor, **encoding} for tensor, encoding in param_encodings.items()
+            ]
+            activation_encodings = [
+                {"name": tensor, **encoding} for tensor, encoding in activation_encodings.items()
+            ]
+
+        encodings_dict = {'version': quantsim.encoding_version,
+                          'activation_encodings': activation_encodings,
+                          'param_encodings': param_encodings,
+                          'excluded_layers': self.sim._excluded_layer_names}
+
+        if self.sim.quant_args:
+            encodings_dict.update({'quantizer_args': self.sim.quant_args})
+
+        # export weight encodings to output json file
+        onnx_file_path = (f if isinstance(f, str) else f.name)
+        encoding_file_path = os.path.splitext(onnx_file_path)[0] + ".encodings"
+        with open(encoding_file_path, 'w', encoding='utf-8') as encoding_file:
+            json.dump(encodings_dict, encoding_file, sort_keys=True, indent=4)
+
+    @staticmethod
+    def _has_non_affine_quantizer(module: torch.nn.Module):
+        for submodule in module.modules():
+            if isinstance(submodule, _QuantizedModuleProtocol):
+                for quantizer in itertools.chain(submodule.input_quantizers,
+                                                 submodule.output_quantizers,
+                                                 submodule.param_quantizers.values()):
+                    if quantizer and not isinstance(quantizer, AffineQuantizerBase):
+                        return True
+        return False
 
 
 @deprecated("""
