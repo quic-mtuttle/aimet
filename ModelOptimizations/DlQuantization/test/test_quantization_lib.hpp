@@ -76,6 +76,9 @@ struct GpuDevice
 typedef ::testing::Types<CpuDevice<float>, CpuDevice<double>, GpuDevice<float>, GpuDevice<double> >
     TestDataTypesAndDevices;
 
+typedef ::testing::Types<GpuDevice<float>, GpuDevice<float> >
+    TestDeviceTypes;
+
 #endif
 
 /**

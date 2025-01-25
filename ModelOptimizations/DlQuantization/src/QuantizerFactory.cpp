@@ -52,6 +52,7 @@
 #include "TensorQuantizationSim.h"
 #include "TfEncodingAnalyzer.h"
 #include "TfEnhancedEncodingAnalyzer.h"
+#include "EncodingAnalyzerWrapper.h"
 
 namespace DlQuantization
 {
@@ -96,6 +97,11 @@ std::unique_ptr<IQuantizationEncodingAnalyzer<DTYPE>> getEncodingAnalyzerInstanc
     }
 }
 
+template <typename DTYPE>
+std::unique_ptr<IBlockEncodingAnalyzer<DTYPE>> getBlockEncodingAnalyzerInstance(QuantizationMode quantization_mode, const TensorDims& shape)
+{
+    return std::unique_ptr<IBlockEncodingAnalyzer<DTYPE>>(new EncodingAnalyzerWrapper<DTYPE>(shape, quantization_mode));
+}
 
 template <typename DTYPE>
 std::unique_ptr<ITensorQuantizationSim<DTYPE>> getTensorQuantizationSim()
@@ -117,6 +123,11 @@ template std::unique_ptr<IQuantizationEncodingAnalyzer<float>>
 getEncodingAnalyzerInstance(QuantizationMode quantization_mode);
 template std::unique_ptr<IQuantizationEncodingAnalyzer<double>>
 getEncodingAnalyzerInstance(QuantizationMode quantization_mode);
+
+template std::unique_ptr<IBlockEncodingAnalyzer<float>>
+getBlockEncodingAnalyzerInstance(QuantizationMode quantization_mode, const TensorDims& shape);
+template std::unique_ptr<IBlockEncodingAnalyzer<double>>
+getBlockEncodingAnalyzerInstance(QuantizationMode quantization_mode, const TensorDims& shape);
 
 template std::unique_ptr<ITensorQuantizationSim<float>> getTensorQuantizationSim();
 template std::unique_ptr<ITensorQuantizationSim<double>> getTensorQuantizationSim();
