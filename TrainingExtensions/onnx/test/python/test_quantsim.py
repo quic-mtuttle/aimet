@@ -40,6 +40,8 @@ import itertools
 import json
 import os
 import tempfile
+import tracemalloc
+
 import onnx.numpy_helper
 import torch
 import numpy as np
@@ -652,6 +654,44 @@ class TestQuantSim:
                                        default_param_bw=8,
                                        path=tempdir)
             sim.session.run(None, {'input': sample_input})
+
+    def test_quantsim_init_memory_usage(self):
+        """
+        When: Instantiate a quantsim model with high activation memory usage
+        Then: Memory usage should not spike
+        """
+        num_layers = 2 ** 9
+        activation_dim = 2 ** 13
+        batch_size = 2 ** 8
+        total_act_memory = num_layers * activation_dim * batch_size
+
+        # Create a model with very high total activation memory usage
+        layers = [
+            onnx.helper.make_node("Constant", inputs=[], outputs=["shape"], name="shape",
+                                  value=onnx.numpy_helper.from_array(np.array([batch_size, activation_dim], dtype=np.dtype("int64")))),
+            onnx.helper.make_node("Expand", inputs=["input", "shape"], outputs=["act0"], name="reshape"),
+        ]
+        for idx in range(num_layers):
+            layers.append(
+                onnx.helper.make_node("Sigmoid", inputs=[f"act{idx}"], outputs=[f"act{idx + 1}"],
+                                      name=f"layer_{idx}")
+            )
+
+        input_tensor = onnx.helper.make_tensor_value_info("input", onnx.TensorProto.FLOAT, [1, 1])
+        output_tensor = onnx.helper.make_tensor_value_info(f"act{num_layers}", onnx.TensorProto.FLOAT,
+                                                           [batch_size, activation_dim])
+        graph = onnx.helper.make_graph(layers, "graph", initializer=[], inputs=[input_tensor],
+                                       outputs=[output_tensor])
+        model = onnx.helper.make_model(graph)
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            tracemalloc.start()
+            sim = QuantizationSimModel(model, path=tempdir)
+            current_mem, peak_mem = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+
+        assert peak_mem < current_mem + 0.25 * total_act_memory
+        assert peak_mem < current_mem * 5
 
     @pytest.mark.skip(reason="test requires exact version of torch that the code has built against.")
     def test_model_with_custom_ops(self):
@@ -1690,3 +1730,9 @@ class TestEncodingPropagation:
                                        config_file=get_path_for_per_channel_config())
             assert sim.qc_quantize_op_dict["identity.input"].quant_info.usePerChannelMode
             assert sim.qc_quantize_op_dict["identity.input"].quant_info.channelAxis == 0
+
+    def test_customop_model(self):
+        from onnxruntime_extensions import get_library_path
+        model = models_for_tests.custom_op_model()
+        sim = QuantizationSimModel(model, user_onnx_libs=[get_library_path()])
+        assert {"model_input", "output", "model_output", "y", "z"} == sim.qc_quantize_op_dict.keys()
