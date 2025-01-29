@@ -45,7 +45,6 @@ import torch
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme, QuantizationDataType
-from aimet_common.utils import deprecated
 
 from aimet_torch.v1.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
     StaticGridQuantWrapper, LearnedGridQuantWrapper, NativeTorchQuantWrapper
@@ -656,7 +655,6 @@ class QuantizationSimModel(_QuantizationSimModelBase):
 
 
 
-@deprecated("Use QuantizationSimModel.load_encodings instead.")
 def load_encodings_to_sim(quant_sim_model: _QuantizationSimModelBase, pytorch_encoding_path: str):
     """
     Loads the saved encodings to quant sim model. The encoding filename to load should end in _torch.encodings,
