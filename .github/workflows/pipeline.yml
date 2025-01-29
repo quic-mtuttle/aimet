@@ -177,11 +177,18 @@ jobs:
       - name: Create python virtial environment
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
+          echo "\
+          torch$([ -n "${{ matrix.VER_TORCH }}" ] && echo "==${{ matrix.VER_TORCH }}")\n\
+          tensorflow-cpu$([ -n "${{ matrix.VER_TENSORFLOW }}" ] && echo "==${{ matrix.VER_TENSORFLOW }}")\n\
+          tensorflow-gpu$([ -n "${{ matrix.VER_TENSORFLOW }}" ] && echo "==${{ matrix.VER_TENSORFLOW }}")\n\
+          onnx$([ -n "${{ matrix.VER_ONNX }}" ] && echo "==${{ matrix.VER_ONNX }}") \
+          " > /tmp/constraints.txt
+
           curl -o ./conda.sh -L 'https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh'
           bash ./conda.sh -u -b -p ./.conda
           sudo apt update -qq && sudo apt install -y g++ # deepspeed compiles cuda kernels
           ./.conda/bin/conda create --name "${{ matrix.id }}" python="${{ matrix.VER_PYTHON }}" $([ "${{ matrix.VER_CUDA }}" != "" ] && echo "cuda-runtime cuda-libraries-dev cuda-compiler --channel nvidia/label/cuda-${{ matrix.VER_CUDA }}")
-          ./.conda/bin/conda run --live-stream --name "${{ matrix.id }}" python3 -m pip install "$(find wheelhouse -name '*.whl')[test]"
+          ./.conda/bin/conda run --live-stream --name "${{ matrix.id }}" python3 -m pip install --constraint=/tmp/constraints.txt "$(find wheelhouse -name '*.whl')[test]"
       - run: |
           TEST_DIR=""
           if [ "${{ matrix.VER_TENSORFLOW }}" != "" ] ; then
