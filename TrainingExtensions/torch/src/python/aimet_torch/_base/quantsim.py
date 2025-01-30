@@ -61,6 +61,7 @@ from typing import (
 )
 
 import torch
+from torch.utils._pytree import tree_flatten
 import onnx
 from packaging import version  # pylint: disable=wrong-import-order
 from safetensors.numpy import save_file as save_safetensor_file
@@ -279,6 +280,10 @@ class _QuantizationSimModelBase(_QuantizationSimModelInterface):
         # Perform sanity checks on inputs
         validate_quantsim_inputs(quant_scheme, rounding_mode, default_output_bw, default_param_bw,
                                  default_data_type)
+
+        # Assert dummy input is traceable by torch.jit.trace
+        _assert_jit_traceable(model, dummy_input)
+
         # save some parameters
         if in_place:
             self.model = model
@@ -1803,3 +1808,76 @@ def check_accumulator_overflow(model: torch.nn.Module, quant_bw: int, accum_bw: 
                     most_accum_range_used_layer, most_accum_range_used * 100)
 
     return most_accum_range_used_layer, most_accum_range_used
+
+
+def _assert_jit_traceable(model, dummy_input):
+    try:
+        from transformers import ( # pylint: disable=import-outside-toplevel
+            PreTrainedModel,
+            Cache,
+            DynamicCache,
+            EncoderDecoderCache
+        )
+    except ImportError:
+        # Dummy definition in case transformers package doesn't exist
+        PreTrainedModel = type('PreTrainedModel', (), {})
+        Cache = type('Cache', (), {})
+        DynamicCache = type('DynamicCache', (), {})
+        EncoderDecoderCache = type('EncoderDecoderCache', (), {})
+
+    if isinstance(model, PreTrainedModel) and model.config.use_return_dict:
+        msg = ' '.join([
+            "QuantizationSimModel only supports models that return a tensor or tuple, list, or dict of tensors",
+            "If the model is from HuggingFace transformers,",
+            "it is required to set ``model.config.return_dict=False``",
+        ])
+        raise RuntimeError(msg)
+
+    try:
+        untraceable_obj = next(
+            x for x in tree_flatten(dummy_input)[0] if not isinstance(x, torch.Tensor)
+        )
+    except StopIteration:
+        return
+
+    msg = "QuantizationSimModel can only take a tensor or tuple, list, or dict of tensors as input; "\
+         f"Got {type(untraceable_obj)}."
+
+    if not isinstance(untraceable_obj, Cache):
+        raise RuntimeError(msg)
+
+    cache_cls = type(untraceable_obj)
+    parent_clsname = type(model).__name__
+    new_clsname = f"My{parent_clsname}"
+
+    msg += '\n'.join([
+         " If the model is from HuggingFace transformers that takes Cache object as input, "\
+        "consider defining a subclass that only takes tensors instead of Cache.\n",
+
+         "For example:\n\n",
+    ])
+
+    if cache_cls in (DynamicCache, EncoderDecoderCache):
+        msg += '\n'.join([
+            f"class {new_clsname}({parent_clsname}):",
+             "    def forward(self, ..., past_key_values: List[Tuple[Tensor, Tensor]] = None, ...):",
+            f"        # Create {cache_cls.__name__} object from nested tuple of tensors `past_key_values`",
+            f"        past_key_values = {cache_cls.__name__}.from_legacy_cache(past_key_values)",
+             "        ..., new_past_key_values, ... =  super().forward(..., past_key_values, ...)",
+             "        return (..., new_past_key_values.to_legacy_cache(), ...)",
+         ])
+    else:
+        msg += '\n'.join([
+            f"class {new_clsname}({parent_clsname}):",
+             "    def forward(self, ..., past_key_values: List[Tuple[Tensor, Tensor]] = None, ...):",
+            f"        # TODO: Create {cache_cls.__name__} object from nested tuple of tensors `past_key_values`",
+            f"        past_key_values: {cache_cls.__name__} = ...",
+             "",
+             "        ..., new_past_key_values, ... =  super().forward(..., past_key_values, ...)",
+             "",
+            f"        # TODO: Create nested tuple of tensors from a {cache_cls.__name__} object `new_past_key_values`",
+             "        new_past_key_values: List[Tuple[Tensor, Tensor]] = ...",
+             "        return (..., new_past_key_values.to_legacy_cache(), ...)",
+         ])
+
+    raise RuntimeError(msg)
