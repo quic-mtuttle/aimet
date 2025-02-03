@@ -370,7 +370,7 @@ def create_pareto_curve(pareto_front_list: List) -> figure:
         bits_ops.append(relative_bit_ops)
         acc_list.append(acc)
 
-    source = ColumnDataSource(data=dict(BitOps=bits_ops, Accuracy=acc_list))
+    source = ColumnDataSource(data={"BitOps": bits_ops, "Accuracy": acc_list})
 
     plot = figure(x_axis_label='BitOps', y_axis_label='Accuracy', width=800, height=800,
                   title="Accuracy vs BitOps")
@@ -589,15 +589,15 @@ def brute_force_search(values: Sequence[Callable[[], float]], target: float, pha
     :returns: Index of the element that is equal to or higher than the target value.
     """
     if phase2_reverse:
-        for i, _ in enumerate(values):
-            if values[i]() >= target:
+        for i, fn in enumerate(values):
+            if fn() >= target:
                 return i
 
     else:
-        for i, _ in enumerate(values):
-            if values[i]() == target:
+        for i, fn in enumerate(values):
+            if fn() == target:
                 return i
-            if values[i]() < target:
+            if fn() < target:
                 if i > 0:
                     return i - 1 # (i-1)-th elem is the smallest elem that satisfies the target score
                 return i         # Even 0-th elem can't satisfy the target score

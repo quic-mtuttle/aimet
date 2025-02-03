@@ -71,7 +71,7 @@ class ModuleReducer(AimetCommonModuleReducer):
 
         super().__init__(using_cuda, reshape, op_to_mask_dict)
         self._model = model
-        self._parent_module_ref = dict()
+        self._parent_module_ref = {}
 
         self._generate_parent_ref(self._model)
 
@@ -206,7 +206,7 @@ class ModuleReducer(AimetCommonModuleReducer):
             if op_input_product.parm_name == "input":
                 continue
             cur_parm = getattr(named_module, op_input_product.parm_name)
-            if op_input_product.parm_name == "running_mean" or op_input_product.parm_name == "running_var":
+            if op_input_product.parm_name in ("running_mean", "running_var"):
                 bn_running_parm = torch.nn.Parameter(reduce_tensor(cur_parm, output_reduction), requires_grad=False)
                 named_module.register_buffer(op_input_product.parm_name, bn_running_parm)
             else:

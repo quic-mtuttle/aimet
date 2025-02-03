@@ -185,12 +185,12 @@ class QuantAnalyzerBase(ABC):
             input_shape = [tuple(x.shape) for x in self._dummy_input]
         _ = self._fold_all_batch_norms(self._model, input_shape, dummy_input=self._dummy_input)
 
-        kwargs = dict(
-            quant_scheme=quant_scheme,
-            default_output_bw=default_output_bw,
-            default_param_bw=default_param_bw,
-            config_file=config_file,
-        )
+        kwargs = {
+            "quant_scheme": quant_scheme,
+            "default_output_bw": default_output_bw,
+            "default_param_bw": default_param_bw,
+            "config_file": config_file,
+        }
         sim = self._get_quantsim_cls()(self._model, self._dummy_input, **kwargs)
         if self._modules_to_ignore:
             self._exclude_modules_from_quantization(self._model, sim, self._modules_to_ignore)
@@ -369,7 +369,6 @@ class QuantAnalyzerBase(ABC):
 
         return eval_score_dict
 
-    # pylint: disable=no-self-use
     @abstractmethod
     def _create_and_export_stats_histogram_plot(self,
                                                 quantizer,
@@ -480,7 +479,6 @@ class QuantAnalyzerBase(ABC):
         _logger.info("Exported per-layer quant analysis (disabled) plot.")
         return layer_wise_eval_score_dict
 
-    # pylint: disable=no-self-use
     def export_per_layer_encoding_min_max_range(self,
                                                 sim: _QuantizationSimModelInterface,
                                                 results_dir: str,

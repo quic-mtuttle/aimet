@@ -115,7 +115,7 @@ def get_weight_constraints(parser: ModelOpDefParser, op_name_in_opdef: str, op_i
     :return: List of weight constraints for the op in {bitwidth, dtype} Dict form
     """
     weight_constraints = []
-    if op_name_in_opdef in op_to_weight_index_map.keys():
+    if op_name_in_opdef in op_to_weight_index_map:
         try:
             datatype_constraints = parser.get_input_datatype_list(op_name_in_opdef, op_to_weight_index_map[op_name_in_opdef])[op_index]
             for datatype in datatype_constraints:
@@ -178,7 +178,7 @@ def get_constraint_accrording_to_json_config(constraint: Dict) -> Dict:
     return constraint_according_json
 
 # pylint: disable=too-many-branches
-def get_supported_kernels_from_backend_info(supported_backend_info_list: SupportedBackendInfo) -> List[Dict]:
+def get_supported_kernels_from_backend_info(supported_backend_info_list: List[SupportedBackendInfo]) -> List[Dict]:
     """
     Returns supported for JSON config file from backend constraints
 
@@ -244,8 +244,8 @@ def populate_supported_kernels_in_json_config(master_opdef_file_path: str,
     with open(json_config_file_path) as file:
         quantsim_config = json.load(file)
 
-    for backend_op_type in supported_kernels_dict:
-        supported_kernels = get_supported_kernels_from_backend_info(supported_kernels_dict[backend_op_type])
+    for backend_op_type, info in supported_kernels_dict.items():
+        supported_kernels = get_supported_kernels_from_backend_info(info)
         if supported_kernels:
             if backend_op_type not in quantsim_config[ConfigDictKeys.OP_TYPE]:
                 quantsim_config[ConfigDictKeys.OP_TYPE][backend_op_type] = {}

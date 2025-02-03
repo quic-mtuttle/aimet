@@ -44,12 +44,11 @@ from onnx import numpy_helper
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from packaging import version
 
-# pylint: disable=wrong-import-order
 from aimet_common.bias_correction import ConvBnPatternHandler
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.connected_graph.connectedgraph_utils import get_ordered_ops
-import aimet_common.libpymo as libpymo
+from aimet_common import _libpymo as libpymo
 from aimet_common.utils import AimetLogger
 
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
@@ -133,7 +132,7 @@ def find_all_batch_norms_to_fold(connected_graph: ConnectedGraph,
     # Backward fold is given priority over Forward fold
     for node in ordered_conv_fc_nodes:
         # Filter out combinations that are not supported
-        if node in conv_linear_bn_activation_info_dict.keys():
+        if node in conv_linear_bn_activation_info_dict:
             bn_info = conv_linear_bn_activation_info_dict[node]
             if bn_info.output_bn and bn_info.output_bn not in bn_picked_for_folding:
                 if is_valid_bn_fold(node.get_module(), model, True):
@@ -145,7 +144,7 @@ def find_all_batch_norms_to_fold(connected_graph: ConnectedGraph,
     bn_conv_pairs = []
     for node in ordered_conv_fc_nodes:
         # Filter out combinations that are not supported
-        if node in conv_linear_bn_activation_info_dict.keys():
+        if node in conv_linear_bn_activation_info_dict:
             bn_info = conv_linear_bn_activation_info_dict[node]
             if bn_info.input_bn and bn_info.input_bn not in bn_picked_for_folding:
                 if is_valid_bn_fold(node.get_module(), model, False):

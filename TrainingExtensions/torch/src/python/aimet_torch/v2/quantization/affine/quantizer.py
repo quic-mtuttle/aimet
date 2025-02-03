@@ -54,7 +54,7 @@ from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize, torch_builtins, _derive_qmin_qmax
 from aimet_torch.v2.utils import ste_round
 from aimet_torch.v2.deepspeed_utils import SafeGatheredParameters
-from ._utils import _GridMixin, _register_signature # pylint: disable=import-error
+from ._utils import _GridMixin, _register_signature
 
 
 __all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize',
@@ -363,22 +363,22 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
                 yield
         except: # pylint: disable=try-except-raise
             raise
-        else:
-            try:
-                num_steps = self.qmax - self.qmin
-                enc_min, enc_max = self.encoding_analyzer.compute_encodings(num_steps, self.symmetric)
-                if self.block_size is not None:
-                    enc_min = enc_min.view(self.min.shape)
-                    enc_max = enc_max.view(self.max.shape)
-                _flag_extreme_min_max(enc_min, enc_max)
 
-            except StatisticsNotFoundError:
-                return
+        try:
+            num_steps = self.qmax - self.qmin
+            enc_min, enc_max = self.encoding_analyzer.compute_encodings(num_steps, self.symmetric)
+            if self.block_size is not None:
+                enc_min = enc_min.view(self.min.shape)
+                enc_max = enc_max.view(self.max.shape)
+            _flag_extreme_min_max(enc_min, enc_max)
 
-            if enc_min is None or enc_max is None:
-                return
+        except StatisticsNotFoundError:
+            return
 
-            self.set_range(enc_min, enc_max)
+        if enc_min is None or enc_max is None:
+            return
+
+        self.set_range(enc_min, enc_max)
 
     def get_min(self, dtype=None) -> Optional[torch.Tensor]:
         """

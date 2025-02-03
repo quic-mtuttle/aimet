@@ -92,7 +92,7 @@ def _visualize(sim: QuantizationSimModel, dummy_input, mode: str, save_path: str
             "No stats found to plot. Either there were no quantized modules, or calibration was not performed before calling this function, or no observers of type _MinMaxObserver or _HistogramObserver were present.")
 
 
-    stats_dict = dict()
+    stats_dict = {}
     keys_list = ["name", 0, 100] + percentile_list
     stats_dict["idx"] = list(range(len(stats_list)))
     for i in keys_list:
@@ -215,7 +215,7 @@ def _get_observer_stats(module, percentile_list):
         if isinstance(module_quantizer.encoding_analyzer.observer, _MinMaxObserver):
             rng = module_quantizer.encoding_analyzer.observer.get_stats()
             if rng.min is not None:
-                stats = dict()
+                stats = {}
                 stats["name"] = module_name
                 stats[0] = torch.min(rng.min).item()
                 stats[100] = torch.max(rng.max).item()
@@ -228,14 +228,14 @@ def _get_observer_stats(module, percentile_list):
             if len(histogram_list) == 1:
                 histogram = histogram_list[0]
                 if histogram.min is not None:
-                    stats = dict()
+                    stats = {}
                     stats["name"] = module_name
                     stats[0] = histogram.min.item()
                     stats[100] = histogram.max.item()
                     _get_advanced_stats_from_histogram(histogram, stats, percentile_list)
                     return stats
             elif len(histogram_list) > 1:
-                stats = dict()
+                stats = {}
                 stats["name"] = module_name
                 curmin = float("inf")
                 curmax = float("-inf")
@@ -281,8 +281,8 @@ def _get_percentile_stats_from_histogram(histogram, percentile_list):
     cum_f = 0
     idx = 0
     percentile_stats = []
-    for i in range(len(histogram.histogram)):
-        f = histogram.histogram[i].item()
+    for i, hist in enumerate(histogram.histogram):
+        f = hist.item()
         if f > 0:
             bin_low = histogram.bin_edges[i].item()
             bin_high = histogram.bin_edges[i + 1].item()
@@ -333,16 +333,17 @@ class DataSources:
                  default_values: dict,
                  percentiles: list
                  ):
-        self.data_source = ColumnDataSource(
-            data=dict(idx=stats_dict["idx"],
-                      namelist=stats_dict["name"],
-                      minlist=stats_dict[0],
-                      min_namelist=["Min"] * len(stats_dict["idx"]),
-                      maxlist=stats_dict[100],
-                      max_namelist=["Max"] * len(stats_dict["idx"]),
-                      marker_yminlist=[default_values['default_ymin']] * len(stats_dict["idx"]),
-                      marker_ymaxlist=[default_values['default_ymax']] * len(stats_dict["idx"]),
-                      selected=[False] * len(stats_dict["idx"])))
+        self.data_source = ColumnDataSource({
+            "idx": stats_dict["idx"],
+            "namelist": stats_dict["name"],
+            "minlist": stats_dict[0],
+            "min_namelist": ["Min"] * len(stats_dict["idx"]),
+            "maxlist": stats_dict[100],
+            "max_namelist": ["Max"] * len(stats_dict["idx"]),
+            "marker_yminlist": [default_values['default_ymin']] * len(stats_dict["idx"]),
+            "marker_ymaxlist": [default_values['default_ymax']] * len(stats_dict["idx"]),
+            "selected": [False] * len(stats_dict["idx"]),
+        })
         if "stridx" in stats_dict.keys():
             self.data_source.add(data=stats_dict["stridx"], name="stridx")
         if "boxplot_upper" in stats_dict.keys():
@@ -356,26 +357,41 @@ class DataSources:
             self.data_source.add(data=stats_dict[key], name=str(key) + "%ilelist")
             self.data_source.add(data=[str(key)+" %ile" for _ in range(len(stats_dict["idx"]))], name=str(key) + "%ile_namelist")
 
-        self.default_values_source = ColumnDataSource(
-            data=dict(default_ymax=[default_values['default_ymax']],
-                      default_ymin=[default_values['default_ymin']],
-                      default_maxclip=[default_values['default_maxclip']],
-                      default_minclip=[default_values['default_minclip']],
-                      default_xmax=[default_values['default_xmax']],
-                      default_xmin=[default_values['default_xmin']]))
+        self.default_values_source = ColumnDataSource({
+            "default_ymax": [default_values['default_ymax']],
+            "default_ymin": [default_values['default_ymin']],
+            "default_maxclip": [default_values['default_maxclip']],
+            "default_minclip": [default_values['default_minclip']],
+            "default_xmax": [default_values['default_xmax']],
+            "default_xmin": [default_values['default_xmin']],
+        })
 
-        self.limits_source = ColumnDataSource(
-            data=dict(ymax=[default_values['default_ymax']], ymin=[default_values['default_ymin']],
-                      xmin=[plot.x_range.start], xmax=[plot.x_range.end],
-                      minclip=[default_values['default_minclip']],
-                      maxclip=[default_values['default_maxclip']]))
+        self.limits_source = ColumnDataSource({
+            "ymax": [default_values['default_ymax']],
+            "ymin": [default_values['default_ymin']],
+            "xmin": [plot.x_range.start],
+            "xmax": [plot.x_range.end],
+            "minclip": [default_values['default_minclip']],
+            "maxclip": [default_values['default_maxclip']],
+        })
 
-        self.table_data_source = ColumnDataSource(
-            data=dict(idx=[], namelist=[], minlist=[], maxlist=[]))
+        self.table_data_source = ColumnDataSource({
+            "idx": [],
+            "namelist": [],
+            "minlist": [],
+            "maxlist": [],
+        })
 
-        self.selected_data_source = ColumnDataSource(
-            data=dict(idx=[], namelist=[], floor=[], ceil=[], minlist=[], min_namelist=[], maxlist=[], max_namelist=[])
-        )
+        self.selected_data_source = ColumnDataSource({
+            "idx": [],
+            "namelist": [],
+            "floor": [],
+            "ceil": [],
+            "minlist": [],
+            "min_namelist": [],
+            "maxlist": [],
+            "max_namelist": [],
+        })
         if "stridx" in stats_dict.keys():
             self.selected_data_source.add(data=[], name="stridx")
         if "boxplot_upper" in stats_dict.keys():
@@ -530,7 +546,7 @@ class QuantStatsVisualizer:
             x_axis_label="Layer index",
             y_axis_label="Activation/Weight",
             tools="pan,wheel_zoom,box_zoom")
-        self.default_values = dict()
+        self.default_values = {}
         self.percentiles = []
         for percentile in percentile_list:
             if percentile not in [25, 50, 75]:
@@ -655,82 +671,82 @@ class QuantStatsVisualizer:
                 selection_columns.append(str(percentile) + "%ilelist")
                 selection_columns.append(str(percentile) + "%ile_namelist")
 
-        customcallbacks.limit_change_callback = CustomJS(args=dict(
-            limits_source=datasources.limits_source,
-            data_source=datasources.data_source,
-            table_data_source=datasources.table_data_source,
-            selected_data_source=datasources.selected_data_source,
-            min_marker_source=datasources.data_source,
-            max_marker_source=datasources.data_source,
-            ymax_input=inputwidgets.ymax_input,
-            ymin_input=inputwidgets.ymin_input,
-            maxclip_input=inputwidgets.maxclip_input,
-            minclip_input=inputwidgets.minclip_input,
-            plot=self.plot,
-            min_thresh_filter=tableobjects.filters.min_thresh_filter,
-            max_thresh_filter=tableobjects.filters.max_thresh_filter,
-            name_filter=tableobjects.filters.name_filter,
-            select=inputwidgets.table_view_select,
-            table_columns=table_columns,
-        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/limit_change_callback.js").read_text("utf8"))
+        customcallbacks.limit_change_callback = CustomJS(args={
+            "limits_source": datasources.limits_source,
+            "data_source": datasources.data_source,
+            "table_data_source": datasources.table_data_source,
+            "selected_data_source": datasources.selected_data_source,
+            "min_marker_source": datasources.data_source,
+            "max_marker_source": datasources.data_source,
+            "ymax_input": inputwidgets.ymax_input,
+            "ymin_input": inputwidgets.ymin_input,
+            "maxclip_input": inputwidgets.maxclip_input,
+            "minclip_input": inputwidgets.minclip_input,
+            "plot": self.plot,
+            "min_thresh_filter": tableobjects.filters.min_thresh_filter,
+            "max_thresh_filter": tableobjects.filters.max_thresh_filter,
+            "name_filter": tableobjects.filters.name_filter,
+            "select": inputwidgets.table_view_select,
+            "table_columns": table_columns,
+        }, code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/limit_change_callback.js").read_text("utf8"))
 
-        customcallbacks.reset_callback = CustomJS(args=dict(
-            limits_source=datasources.limits_source,
-            data_source=datasources.data_source,
-            table_data_source=datasources.table_data_source,
-            selected_data_source=datasources.selected_data_source,
-            default_values_source=datasources.default_values_source,
-            min_marker_source=datasources.data_source,
-            max_marker_source=datasources.data_source,
-            ymax_input=inputwidgets.ymax_input,
-            ymin_input=inputwidgets.ymin_input,
-            maxclip_input=inputwidgets.maxclip_input,
-            minclip_input=inputwidgets.minclip_input,
-            select=inputwidgets.table_view_select,
-            name_input=inputwidgets.name_input,
-            plot=self.plot,
-            boxplot=self.boxplot,
-            min_thresh_filter=tableobjects.filters.min_thresh_filter,
-            max_thresh_filter=tableobjects.filters.max_thresh_filter,
-            name_filter=tableobjects.filters.name_filter,
-            selection_columns=selection_columns,
-            table_columns=table_columns,
-            mode=mode,
-            boxplot_unit_width=QuantStatsVisualizer.plot_dims["boxplot_unit_width"],
-        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/reset_callback.js").read_text("utf8"))
+        customcallbacks.reset_callback = CustomJS(args={
+            "limits_source": datasources.limits_source,
+            "data_source": datasources.data_source,
+            "table_data_source": datasources.table_data_source,
+            "selected_data_source": datasources.selected_data_source,
+            "default_values_source": datasources.default_values_source,
+            "min_marker_source": datasources.data_source,
+            "max_marker_source": datasources.data_source,
+            "ymax_input": inputwidgets.ymax_input,
+            "ymin_input": inputwidgets.ymin_input,
+            "maxclip_input": inputwidgets.maxclip_input,
+            "minclip_input": inputwidgets.minclip_input,
+            "select": inputwidgets.table_view_select,
+            "name_input": inputwidgets.name_input,
+            "plot": self.plot,
+            "boxplot": self.boxplot,
+            "min_thresh_filter": tableobjects.filters.min_thresh_filter,
+            "max_thresh_filter": tableobjects.filters.max_thresh_filter,
+            "name_filter": tableobjects.filters.name_filter,
+            "selection_columns": selection_columns,
+            "table_columns": table_columns,
+            "mode": mode,
+            "boxplot_unit_width": QuantStatsVisualizer.plot_dims["boxplot_unit_width"],
+        }, code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/reset_callback.js").read_text("utf8"))
 
-        customcallbacks.name_filter_callback = CustomJS(args=dict(
-            data_source=datasources.data_source,
-            table_data_source=datasources.table_data_source,
-            limits_source=datasources.limits_source,
-            min_thresh_filter=tableobjects.filters.min_thresh_filter,
-            max_thresh_filter=tableobjects.filters.max_thresh_filter,
-            name_filter=tableobjects.filters.name_filter,
-            select=inputwidgets.table_view_select,
-            table_columns=table_columns,
-        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/name_filter_callback.js").read_text("utf8"))
+        customcallbacks.name_filter_callback = CustomJS(args={
+            "data_source": datasources.data_source,
+            "table_data_source": datasources.table_data_source,
+            "limits_source": datasources.limits_source,
+            "min_thresh_filter": tableobjects.filters.min_thresh_filter,
+            "max_thresh_filter": tableobjects.filters.max_thresh_filter,
+            "name_filter": tableobjects.filters.name_filter,
+            "select": inputwidgets.table_view_select,
+            "table_columns": table_columns,
+        }, code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/name_filter_callback.js").read_text("utf8"))
 
-        customcallbacks.select_table_view_callback = CustomJS(args=dict(
-            data_source=datasources.data_source,
-            table_data_source=datasources.table_data_source,
-            select=inputwidgets.table_view_select,
-            min_thresh_filter=tableobjects.filters.min_thresh_filter,
-            max_thresh_filter=tableobjects.filters.max_thresh_filter,
-            name_filter=tableobjects.filters.name_filter,
-            table=tableobjects.data_table,
-            table_columns=table_columns,
-        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/select_table_view_callback.js").read_text("utf8"))
+        customcallbacks.select_table_view_callback = CustomJS(args={
+            "data_source": datasources.data_source,
+            "table_data_source": datasources.table_data_source,
+            "select": inputwidgets.table_view_select,
+            "min_thresh_filter": tableobjects.filters.min_thresh_filter,
+            "max_thresh_filter": tableobjects.filters.max_thresh_filter,
+            "name_filter": tableobjects.filters.name_filter,
+            "table": tableobjects.data_table,
+            "table_columns": table_columns,
+        }, code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/select_table_view_callback.js").read_text("utf8"))
 
-        customcallbacks.table_selection_callback = CustomJS(args=dict(
-            data_source=datasources.data_source,
-            table_data_source=datasources.table_data_source,
-            selected_data_source=datasources.selected_data_source,
-            limits_source=datasources.limits_source,
-            boxplot=self.boxplot,
-            selection_columns=selection_columns,
-            mode=mode,
-            boxplot_unit_width=QuantStatsVisualizer.plot_dims["boxplot_unit_width"],
-        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/table_selection_callback.js").read_text("utf8"))
+        customcallbacks.table_selection_callback = CustomJS(args={
+            "data_source": datasources.data_source,
+            "table_data_source": datasources.table_data_source,
+            "selected_data_source": datasources.selected_data_source,
+            "limits_source": datasources.limits_source,
+            "boxplot": self.boxplot,
+            "selection_columns": selection_columns,
+            "mode": mode,
+            "boxplot_unit_width": QuantStatsVisualizer.plot_dims["boxplot_unit_width"],
+        }, code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/table_selection_callback.js").read_text("utf8"))
 
         return customcallbacks
 

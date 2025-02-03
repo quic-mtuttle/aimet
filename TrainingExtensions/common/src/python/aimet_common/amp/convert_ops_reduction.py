@@ -45,7 +45,7 @@ import math
 import abc
 import json
 try:
-    import cvxpy as cp  # pylint: disable=import-error
+    import cvxpy as cp
 except ImportError:
     print("Unable to import cvxpy")
 import networkx as nx
@@ -225,7 +225,7 @@ class ReduceConvertOps(abc.ABC):
                         for edge in edges_to_remove:
                             G.remove_edge(edge[0], edge[1])
                     else:
-                        raise Exception("Unexpected quantizer group type.")
+                        raise RuntimeError("Unexpected quantizer group type.")
 
     @staticmethod
     def contract_non_qg_nodes(G: nx.DiGraph):
@@ -234,7 +234,7 @@ class ReduceConvertOps(abc.ABC):
         :param G: Op graph
         :return: QuantizerGroup Graph
         """
-        num_quantizer_group_nodes = sum([G.nodes[node]["is_quantizer_group"] for node in G.nodes])
+        num_quantizer_group_nodes = sum(G.nodes[node]["is_quantizer_group"] for node in G.nodes)
         while num_quantizer_group_nodes < G.number_of_nodes():
             for node in G.nodes:
                 if not G.nodes[node]["is_quantizer_group"]:
@@ -250,7 +250,7 @@ class ReduceConvertOps(abc.ABC):
                         if G.nodes[succ_node]["is_quantizer_group"]:
                             G = nx.contracted_nodes(G, succ_node, node, self_loops=False)
                             break
-            num_quantizer_group_nodes = sum([G.nodes[node]["is_quantizer_group"] for node in G.nodes])
+            num_quantizer_group_nodes = sum(G.nodes[node]["is_quantizer_group"] for node in G.nodes)
         return G
 
     @staticmethod
@@ -277,8 +277,8 @@ class ReduceConvertOps(abc.ABC):
         :param ops_dict: CG ops
         :return:
         """
-        dotted_name2output_shape = dict()
-        dotted_name2op_name = dict()
+        dotted_name2output_shape = {}
+        dotted_name2op_name = {}
         for op in ops_dict:
             # pylint: disable=protected-access
             dotted_name2output_shape[ops_dict[op].dotted_name] = [dim if dim else 1 for dim in ops_dict[op]._output_shape]
@@ -352,7 +352,7 @@ class ReduceConvertOps(abc.ABC):
                 tensor_dims_corr = list(tensor_dims)[1:]
                 _logger.info("WARNING: 5-dimensional tensor, taking the last 4 dimensions only!")
             else:
-                raise Exception("Unexpected tensor dimensions.")
+                raise RuntimeError("Unexpected tensor dimensions.")
 
             # pylint: disable=no-member
             convert_cost = \
@@ -501,7 +501,7 @@ class ReduceConvertOps(abc.ABC):
             elif solution_dict[qgroup] == 16:
                 nodes_16bit.add(qgroup)
             else:
-                raise Exception("Bitwidth not supported.")
+                raise RuntimeError("Bitwidth not supported.")
 
         _logger.info("Number of 8-bit activations is %d", len(nodes_8bit))
         _logger.info("Number of 16-bit activations is %d", len(nodes_16bit))
@@ -523,7 +523,7 @@ class ReduceConvertOps(abc.ABC):
             elif solution_dict[qgroup] == 16:
                 nodes_16bit.add(qgroup)
             else:
-                raise Exception("Bitwidth not supported.")
+                raise RuntimeError("Bitwidth not supported.")
 
         return nx.cut_size(qg_graph, nodes_8bit, nodes_16bit, weight=weight_key)
 
@@ -541,13 +541,13 @@ class ReduceConvertOps(abc.ABC):
 
         elif alpha == 1.0:  # output the phase 2 solution
             phase_three_sol = self._phase_two_sol.copy()
-            solve_data_dict = dict()
+            solve_data_dict = {}
             solve_data_dict["status"] = "alpha = 1.0; solution copied from phase 2."
             solve_data_dict["num_precision_changes_phase_2"] = ReduceConvertOps.compute_num_precision_changes(
                 self.quantizer_group_graph,
                 self._phase_two_sol)
         else:
-            raise Exception("Invalid value for alpha.")
+            raise RuntimeError("Invalid value for alpha.")
 
         return phase_three_sol, solve_data_dict
 
@@ -568,7 +568,7 @@ class ReduceConvertOps(abc.ABC):
 
         num_nodes = qg_graph.number_of_nodes()
 
-        node2index = dict()
+        node2index = {}
         for i, node in enumerate(qg_graph.nodes):
             if "_weights_only" not in node:
                 node2index[node] = i
@@ -639,7 +639,7 @@ class ReduceConvertOps(abc.ABC):
                     cp.abs(x[node2index[u]] - x[node2index[v]]) * qg_graph.edges[(u, v)]["convert_cycles"])
             constraints += [cp.sum(weight_cut_terms) <= cost_sum_threshold]
         else:
-            raise Exception(
+            raise RuntimeError(
                 "Available versions are unweighted_cut_size(1), weighted_with_tensor_size(2), and weighted_with_predicted_convert_cost(3)")
 
         # objective
@@ -654,7 +654,7 @@ class ReduceConvertOps(abc.ABC):
                     elif key == (16, 8):
                         objective_terms.append(qg_graph.nodes[node][key] * y[i])
                     else:
-                        raise Exception("Considering only 8 or 16 bit activation candidates.")
+                        raise RuntimeError("Considering only 8 or 16 bit activation candidates.")
         objective = cp.sum(objective_terms)
 
         # cvxpy problem instance
@@ -662,7 +662,7 @@ class ReduceConvertOps(abc.ABC):
         prob.solve(solver=cp.CBC, maximumSeconds=10, verbose=True)
 
         # print information about the cvxpy solution and save data to solve_data_dict
-        solve_data_dict = dict()
+        solve_data_dict = {}
         solve_data_dict["graph_number_of_nodes"] = qg_graph.number_of_nodes()
         solve_data_dict["graph_number_of_edges"] = qg_graph.number_of_edges()
         solve_data_dict["alpha"] = alpha
@@ -674,20 +674,19 @@ class ReduceConvertOps(abc.ABC):
         _logger.info("---------------")
         _logger.info("prob.status: %s", prob.status)
         _logger.info("objective.value: %s", objective.value)
-        phase_three_sol = dict()
-        for node in node2index:
-            if round(x[node2index[node]].value) == 1 and round(
-                    y[node2index[node]].value) == 0:  # "round" is for tolerance
+        phase_three_sol = {}
+        for node, idx in node2index.items():
+            if round(x[idx].value) == 1 and round(y[idx].value) == 0:  # "round" is for tolerance
                 phase_three_sol[node] = 8
-            elif round(x[node2index[node]].value) == 0 and round(y[node2index[node]].value) == 1:
+            elif round(x[idx].value) == 0 and round(y[idx].value) == 1:
                 phase_three_sol[node] = 16
             else:
-                raise Exception("The solution has a bug")
+                raise RuntimeError("The solution has a bug")
 
-        solve_data_dict["num_nodes_8bits_phase2"] = sum([phase_two_sol[node] == 8 for node in phase_two_sol])
-        solve_data_dict["num_nodes_16bits_phase2"] = sum([phase_two_sol[node] == 16 for node in phase_two_sol])
-        solve_data_dict["num_nodes_8bits_phase3"] = sum([phase_three_sol[node] == 8 for node in phase_three_sol])
-        solve_data_dict["num_nodes_16bits_phase3"] = sum([phase_three_sol[node] == 16 for node in phase_three_sol])
+        solve_data_dict["num_nodes_8bits_phase2"] = sum(sol == 8 for sol in phase_two_sol.values())
+        solve_data_dict["num_nodes_16bits_phase2"] = sum(sol == 16 for sol in phase_two_sol.values())
+        solve_data_dict["num_nodes_8bits_phase3"] = sum(sol == 8 for sol in phase_three_sol.values())
+        solve_data_dict["num_nodes_16bits_phase3"] = sum(sol == 16 for sol in phase_three_sol.values())
 
         num_precision_changes_phase_3 = ReduceConvertOps.compute_num_precision_changes(qg_graph, phase_three_sol)
         _logger.info("num_precision_changes_phase_3: %d", num_precision_changes_phase_3)
@@ -782,11 +781,11 @@ class ReduceConvertOps(abc.ABC):
             G_without_contraction_attribute.nodes[node]["style"] = "filled"
 
         # Also, need to remove edge attributes, otherwise we get a pydot error
-        for edge in G_without_contraction_attribute.edges:
+        for edge in G_without_contraction_attribute.edges: # pylint: disable=consider-using-dict-items
             for attribute in qg_graph.edges[edge]:
                 del G_without_contraction_attribute.edges[edge][attribute]
 
         p = to_pydot(G_without_contraction_attribute)
-        p.write_raw(results_dir + "/AMP_ph3_quantizer_group_graph_{}_color_{}.dot".format(model_name, filename_suffix))
+        p.write(results_dir + "/AMP_ph3_quantizer_group_graph_{}_color_{}.dot".format(model_name, filename_suffix))
 
         # Note: We can later convert the dot file to png using: "dot filename.dot -Tpng -o filename.png"

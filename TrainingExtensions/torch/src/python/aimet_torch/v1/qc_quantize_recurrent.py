@@ -42,7 +42,7 @@ from collections import defaultdict
 from typing import Tuple, List, Union, Dict
 import torch
 from torch.nn.utils.rnn import PackedSequence, pad_packed_sequence, pack_padded_sequence
-import aimet_common.libpymo as libpymo
+from aimet_common import libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_common.utils import AimetLogger
 from aimet_torch.defs import OpToIOTensors
@@ -426,7 +426,7 @@ class QcQuantizeRecurrent(torch.nn.Module): # pylint: disable=too-many-public-me
         Quantizes and dequantizes a parameter
         @returns A dictionary of parameters (with quantization noise if enabled.)
         """
-        quantized_params = dict()
+        quantized_params = {}
         shadow_params = {name: param.detach().clone()  for name, param in self.named_parameters(recurse=False)}
 
         if self._mode != QcQuantizeOpMode.LEARN_ENCODINGS:

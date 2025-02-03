@@ -42,7 +42,7 @@ import tensorflow as tf
 from packaging import version
 
 # Disable pylint errors because of conditional imports
-# pylint: disable=wrong-import-order, ungrouped-imports
+# pylint: disable=ungrouped-imports
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.keras.layers.advanced_activations import _large_compatible_negative
 from tensorflow.python.keras.utils import tf_utils
@@ -51,7 +51,6 @@ if version.parse(tf.version.VERSION) < version.parse("2.10"):
     from tensorflow.python.keras.layers.multi_head_attention import MultiHeadAttention, _build_proj_equation, _get_output_shape
 else:
     from tensorflow.keras.layers import MultiHeadAttention
-    # pylint: disable=import-error
     from keras.layers.attention.multi_head_attention import _build_proj_equation, _get_output_shape
 
 # Disable pylint warning since there is a conditional import above

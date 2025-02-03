@@ -45,13 +45,13 @@ import copy
 from collections import defaultdict, deque
 from enum import IntEnum
 import torch
-import torch.nn as nn
+from torch import nn
 import torch.onnx.symbolic_caffe2
 import torchvision
 import onnx
 import yaml
 from onnx import GraphProto
-from packaging import version  # pylint: disable=wrong-import-order
+from packaging import version
 
 from aimet_common.utils import AimetLogger
 import aimet_torch.utils
@@ -322,7 +322,7 @@ class CustomMarker(torch.nn.Module):
         """
         Forward method for this CustomMarker layer
         """
-        marked_tensor_map = dict()
+        marked_tensor_map = {}
         marked_inputs = self._apply_markers_to_tuple(inputs, 'True', marked_tensor_map)
 
         if kwargs:
@@ -380,7 +380,7 @@ class CustomMarker(torch.nn.Module):
         :param is_start_marker: set to 'True' or 'False' based on if called for input or output dict of tensors
         :param marked_tensor_map: contains a map of id(tensor) to updated tensor i.e. after applying marker function.
         """
-        marked_dict_inputs = dict()
+        marked_dict_inputs = {}
         for k, t in tensors_dict.items():
             if id(t) in marked_tensor_map: # if tensor is already seen before map to the previous tensor
                 t = marked_tensor_map[id(t)]
@@ -487,8 +487,7 @@ class OnnxSaver:
         :param onnx_model: ONNX model object
         :param pytorch_model: Equivalent PyTorch model instance
         """
-        # pylint: disable=consider-using-generator
-        root_module_names = tuple([local_module_name for local_module_name, _ in pytorch_model.named_children()])
+        root_module_names = tuple(local_module_name for local_module_name, _ in pytorch_model.named_children())
         node_names = [node.name  for node in onnx_model.graph.node if not node.name.startswith('Constant')]
         num_nodes = len(node_names)
         node_names = set(node_names)
@@ -1143,7 +1142,7 @@ class OnnxSaver:
         :param start_marker_map: Map of start marker nodes in the ONNX graph
         :return:
         """
-        node_name_count_map = dict()
+        node_name_count_map = {}
         visited = set()
         leaf_only_start_marker = {n:m for n, m in start_marker_map.items()
                                   if m[0].attribute[MarkerAttr.IS_LEAF].s.decode() == 'True'}
@@ -1469,7 +1468,7 @@ class OnnxSaver:
                 recurrent_nodes.append(node.name)
 
         # Collection of recurrent nodes that includes only the first layer nodes
-        root_nodes = dict()
+        root_nodes = {}
         # onnx graph is maintained in topological order, the first occurrence of the onnx node with the module name will
         # be the root node of the recurrent module
         for node_name in recurrent_nodes:
@@ -1760,18 +1759,18 @@ def get_layers_in_io_tensor_map(op_to_io_tensor_map: Dict) -> Dict[str, str]:
     """
     layers_to_onnx_op_names = {}
     if version.parse(torch.__version__) < version.parse("1.13.0") or not EXPORT_TO_ONNX_DIRECT:
-        for name in op_to_io_tensor_map.keys():
+        for name in op_to_io_tensor_map:
             modified_name = name
             if modified_name.endswith('.end'):
                 modified_name = modified_name[:-4]
-            if name in layers_to_onnx_op_names.keys():
+            if name in layers_to_onnx_op_names:
                 layers_to_onnx_op_names[modified_name.split('#')[0]].append(name)
             else:
                 layers_to_onnx_op_names[modified_name.split('#')[0]] = [name]
     else:
-        for name in op_to_io_tensor_map.keys():
+        for name in op_to_io_tensor_map:
             pytorch_name = get_pytorch_name_from_onnx_name(name)
-            if pytorch_name in layers_to_onnx_op_names.keys():
+            if pytorch_name in layers_to_onnx_op_names:
                 layers_to_onnx_op_names[pytorch_name].append(name)
             else:
                 layers_to_onnx_op_names[pytorch_name] = [name]

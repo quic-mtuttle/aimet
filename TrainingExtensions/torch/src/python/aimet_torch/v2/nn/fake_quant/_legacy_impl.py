@@ -34,7 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-# pylint: disable=too-many-lines, wrong-import-order
+# pylint: disable=too-many-lines
 """Fake-quantized modules (deprecated)"""
 
 from packaging import version
@@ -45,13 +45,13 @@ import warnings
 
 import torch
 from torch import Tensor
-import torch.nn as nn
+from torch import nn
 from torch.nn.modules.adaptive import _ASMoutput
 from torch.nn.utils.rnn import PackedSequence
 from torch.utils._pytree import tree_map
 
-from ..base import BaseQuantizationMixin # pylint: disable=import-error
-from ..modules import custom # pylint: disable=import-error
+from ..base import BaseQuantizationMixin
+from ..modules import custom
 
 
 class FakeQuantMeta(abc.ABCMeta):

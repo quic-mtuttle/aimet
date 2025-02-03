@@ -43,7 +43,7 @@ import itertools
 from typing import Type, List, Dict, Union, Iterable, Mapping, Optional
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 from aimet_torch.utils import is_vector_encoding
 from aimet_torch.v2.quantization.affine.encoding import VectorEncoding, AffineEncoding
@@ -615,9 +615,9 @@ class BaseQuantizationMixin(abc.ABC):
         # pylint: disable=protected-access
 
         qtzn_module_cls = type(self)
-        orig_module_cls = self.qcls_to_cls.get(qtzn_module_cls)
+        orig_module_cls = self.qcls_to_cls[qtzn_module_cls]
 
-        orig_module = self.__new__(orig_module_cls)
+        orig_module = orig_module_cls.__new__(orig_module_cls)
         orig_module.__dict__ = self.__dict__.copy()
         orig_module.__dict__.pop('forward', None)
 
@@ -704,5 +704,5 @@ def _remove_quantizers(quantizers, keys):
     except Exception:
         ctx._cleanup() # pylint: disable=protected-access
         raise
-    else:
-        return ctx
+
+    return ctx

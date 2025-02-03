@@ -54,8 +54,7 @@ from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from packaging import version
 
-# pylint: disable=wrong-import-order
-from aimet_common import libpymo, quantsim
+from aimet_common import _libpymo as libpymo, quantsim
 from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim import extract_global_quantizer_args, VALID_ENCODING_VERSIONS
@@ -314,7 +313,7 @@ class QuantizationSimModel:
             if self.model.get_initializer(name).data_type != 1:  # 1 corresponds to float, dictionary can be found by using onnx.TensorProto.DataType.items()
                 return False
         else:  # dynamic activation
-            if name not in self.activation_dtypes.keys() or self.activation_dtypes[name] not in data_types_to_quantize:
+            if name not in self.activation_dtypes or self.activation_dtypes[name] not in data_types_to_quantize:
                 return False
 
         # Check if the tensor is param to certain ops (eg: Resize)
@@ -410,8 +409,8 @@ class QuantizationSimModel:
         outputs = sess.run(None, dummy_input)
 
         activation_dtypes = {}
-        for idx in range(len(self.model.graph().output)):
-            act_name = self.model.graph().output[idx].name
+        for idx, node in enumerate(self.model.graph().output):
+            act_name = node.name
             dtype = outputs[idx].dtype
             activation_dtypes[act_name] = dtype
         remove_activation_hooks(self.model.model, hooks)
@@ -1201,7 +1200,7 @@ def set_blockwise_quantization_for_weights(sim: QuantizationSimModel,
         if op.type in op_types:
             _, _, param_quantizers = sim.get_op_quantizers(op)
 
-            if "weight" in param_quantizers.keys():
+            if "weight" in param_quantizers:
                 weight_quantizer: QcQuantizeOp = param_quantizers["weight"]
 
                 try:
@@ -1251,7 +1250,7 @@ def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel,
             _, _, param_quantizers = sim.get_op_quantizers(op)
 
 
-            if "weight" in param_quantizers.keys():
+            if "weight" in param_quantizers:
                 weight_quantizer: QcQuantizeOp = param_quantizers["weight"]
 
                 try:

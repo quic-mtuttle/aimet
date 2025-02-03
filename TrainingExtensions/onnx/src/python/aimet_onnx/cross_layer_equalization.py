@@ -49,12 +49,11 @@ from onnx import numpy_helper
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from packaging import version
 
-# pylint: disable=wrong-import-order
 from aimet_common.utils import AimetLogger
 from aimet_common.connected_graph.connectedgraph import get_ordered_ops
 from aimet_common.cross_layer_equalization import GraphSearchUtils, CrossLayerScaling as CLS, ClsSetInfo, \
     HighBiasFold as HBF
-import aimet_common.libpymo as libpymo      # pylint: disable=import-error
+from aimet_common import _libpymo as libpymo
 
 from aimet_onnx.meta.connectedgraph import ConnectedGraph, WEIGHT_INDEX, BIAS_INDEX
 from aimet_onnx.meta.operations import Op

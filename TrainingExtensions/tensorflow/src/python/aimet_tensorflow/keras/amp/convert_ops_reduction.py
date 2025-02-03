@@ -80,7 +80,7 @@ class ReduceConvertOps(BaseReduceConvertOps):
         The function returns quantizer-group name to its list index dictionary
         :return: mapping of quantizer-group name and its position in the quantizer-group list
         """
-        quantizer_group2node_index = dict()
+        quantizer_group2node_index = {}
         counter = 0
         for qgroup in self._quantizer_groups:
             if len(qgroup.input_quantizers) == 1 and not qgroup.output_quantizers:
@@ -95,7 +95,7 @@ class ReduceConvertOps(BaseReduceConvertOps):
                 quantizer_group2node_index[qgroup.parameter_quantizers[0].split('/')[0] + "_weights_only"] = counter
                 counter += 1
             else:
-                raise Exception("Issue with this quantizer group:{}".format(qgroup))
+                raise RuntimeError("Issue with this quantizer group:{}".format(qgroup))
         return quantizer_group2node_index
 
     def generate_graphs(self) -> Tuple:
@@ -187,7 +187,7 @@ class ReduceConvertOps(BaseReduceConvertOps):
         QUANTIZER_TYPE_INPUT = 'input'
         QUANTIZER_TYPE_OUTPUT = 'output'
 
-        solution_dict = dict()
+        solution_dict = {}
         # pylint: disable=protected-access
         for layer_name, layer in self._sim._layer_name_to_quant_wrapper.items():
             for quantizer in layer.input_quantizers.layers:
@@ -220,9 +220,9 @@ class ReduceConvertOps(BaseReduceConvertOps):
                 if all(all_eight_bits):
                     bitwidth = 8
                 else:
-                    raise Exception("Candidate parameter bandwidths are not all 8 bits -- unsupported.")
+                    raise RuntimeError("Candidate parameter bandwidths are not all 8 bits -- unsupported.")
             else:
-                raise Exception("Unexpected quantizer group type.")
+                raise RuntimeError("Unexpected quantizer group type.")
 
             if bitwidth == 8:
                 candidate = ((8, QuantizationDataType.int), (8, QuantizationDataType.int))

@@ -168,12 +168,12 @@ class QuantAnalyzer:
         :return: Quantsim object.
         """
         _ = fold_all_batch_norms_to_weight(self._onnx_model)
-        kwargs = dict(
-            quant_scheme=quant_scheme,
-            default_activation_bw=default_activation_bw,
-            default_param_bw=default_param_bw,
-            config_file=config_file,
-        )
+        kwargs = {
+            "quant_scheme": quant_scheme,
+            "default_activation_bw": default_activation_bw,
+            "default_param_bw": default_param_bw,
+            "config_file": config_file,
+        }
         sim = QuantizationSimModel(copy.deepcopy(self._onnx_model), self._dummy_input, **kwargs)
         sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
         return sim
@@ -417,7 +417,7 @@ class QuantAnalyzer:
         param_quantizers = {name: q for name, q in param_quantizers.items() if q.enabled}
         return input_quantizers, output_quantizers, param_quantizers
 
-    # pylint: disable=no-self-use, too-many-branches, too-many-locals
+    # pylint: disable=too-many-branches, too-many-locals
     def export_per_layer_encoding_min_max_range(self, sim: QuantizationSimModel, results_dir: str) -> Tuple[Dict, Dict]:
         """
         Exports encoding min and max range for all weights and activations. results_dir has

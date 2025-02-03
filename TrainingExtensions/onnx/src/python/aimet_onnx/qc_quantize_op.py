@@ -39,8 +39,7 @@
 from typing import Union, List, Optional, Dict, Tuple
 import numpy as np
 
-import aimet_common.libpymo as libpymo
-from aimet_common.libpymo import TensorQuantizerOpMode
+from aimet_common import _libpymo as libpymo
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantizationDataType, EncodingType
 from aimet_common import libquant_info
 from aimet_common.utils import deprecated
@@ -48,7 +47,7 @@ from aimet_common.quantsim import calculate_delta_offset, create_encoding_from_m
 from aimet_onnx import lpbq_utils
 
 
-OpMode = TensorQuantizerOpMode
+OpMode = libpymo.TensorQuantizerOpMode
 
 
 class TensorQuantizerParams:
@@ -498,13 +497,15 @@ class QcQuantizeOp:
         if self.data_type == QuantizationDataType.int:
             encodings = []
             for encoding in self.get_encodings():
-                enc_dict = dict(min=encoding.min,
-                                max=encoding.max,
-                                scale=encoding.delta,
-                                offset=int(encoding.offset),
-                                bitwidth=encoding.bw,
-                                is_symmetric=str(self.use_symmetric_encodings),
-                                dtype="int")
+                enc_dict = {
+                    "min": encoding.min,
+                    "max": encoding.max,
+                    "scale": encoding.delta,
+                    "offset": int(encoding.offset),
+                    "bitwidth": encoding.bw,
+                    "is_symmetric": str(self.use_symmetric_encodings),
+                    "dtype": "int",
+                }
                 encodings.append(enc_dict)
             return encodings
 
@@ -524,10 +525,11 @@ class QcQuantizeOp:
         if not self.enabled or not self.is_initialized():
             return None
 
-        enc_dict = dict(enc_type=self._encoding_type().name,
-                        dtype="INT" if self.data_type == QuantizationDataType.int else "FLOAT",
-                        bw=self.bitwidth,
-                        )
+        enc_dict = {
+            "enc_type": self._encoding_type().name,
+            "dtype": "INT" if self.data_type == QuantizationDataType.int else "FLOAT",
+            "bw": self.bitwidth,
+        }
 
         if self.data_type == QuantizationDataType.int:
             enc_dict["is_sym"] = self.use_symmetric_encodings
@@ -657,7 +659,7 @@ class GroupedBlockQuantizeDequantize(QcQuantizeOp):
         encodings = super()._export_1_0_0_encodings()
         if not encodings:
             return None
-        if "block_size" not in encodings.keys():
+        if "block_size" not in encodings:
             return encodings
 
         encodings["compressed_bw"] = self.bitwidth

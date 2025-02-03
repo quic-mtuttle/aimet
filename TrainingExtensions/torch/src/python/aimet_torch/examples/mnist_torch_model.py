@@ -39,9 +39,9 @@
 
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as functional
-import torch.optim as optim
+from torch import nn
+from torch.nn import functional
+from torch import optim
 from torchvision import datasets, transforms
 
 from aimet_common.data_cache_utility import is_cache_env_set, is_mnist_cache_present, copy_mnist_to_cache, copy_cache_mnist_to_local_build
@@ -50,14 +50,16 @@ from aimet_common.utils import AimetLogger
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
 # Training settings
-args = dict(batch_size=64,
-            test_batch_size=1000,
-            epochs=2,
-            lr=0.01,
-            momentum=0.5,
-            no_cuda=True,
-            seed=1,
-            log_interval=10)
+args = {
+    "batch_size": 64,
+    "test_batch_size": 1000,
+    "epochs": 2,
+    "lr": 0.01,
+    "momentum": 0.5,
+    "no_cuda": True,
+    "seed": 1,
+    "log_interval": 10,
+}
 
 
 class DataLoaderMnist:

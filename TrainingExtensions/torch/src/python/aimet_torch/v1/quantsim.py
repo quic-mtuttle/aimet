@@ -351,8 +351,8 @@ class QuantizationSimModel(_QuantizationSimModelBase):
         """
         Replaces StaticGridWrapper with LearnedGridWrapper
         """
-        if self._quant_scheme == QuantScheme.training_range_learning_with_tf_init or self._quant_scheme == \
-                QuantScheme.training_range_learning_with_tf_enhanced_init:
+        if self._quant_scheme in (QuantScheme.training_range_learning_with_tf_init,
+                                  QuantScheme.training_range_learning_with_tf_enhanced_init):
             try:
                 device = utils.get_device(self.model)
             except StopIteration:
@@ -641,7 +641,7 @@ class QuantizationSimModel(_QuantizationSimModelBase):
         if isinstance(dummy_input, torch.Tensor):
             dummy_input = dummy_input.to(device)
         else:
-            dummy_input = tuple([input.to(device) for input in dummy_input])  # pylint: disable=consider-using-generator
+            dummy_input = tuple(input.to(device) for input in dummy_input)
         QuantizationSimModel._replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device)
 
         if export_to_torchscript:

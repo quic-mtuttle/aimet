@@ -48,7 +48,7 @@ import torch
 from torch import nn
 from torch.utils._pytree import tree_map
 
-from packaging import version  # pylint: disable=wrong-import-order
+from packaging import version
 from aimet_torch.v2.quantization.base import EncodingBase
 from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer
 from aimet_torch.utils import deprecated
@@ -222,7 +222,8 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
 
     @torch.no_grad()
     def __deepcopy__(self, memo):
-        self_copy = self.__new__(type(self))
+        cls = type(self)
+        self_copy = cls.__new__(cls)
         self_copy.__dict__ = copy.deepcopy(self.__dict__, memo)
         self_copy.set_extra_state(self.get_extra_state())
         return self_copy

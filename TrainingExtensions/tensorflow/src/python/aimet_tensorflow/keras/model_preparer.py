@@ -46,15 +46,15 @@ import numpy as np
 import tensorflow as tf
 
 import tensorflow.keras.backend as K
-from packaging import version  # pylint: disable=wrong-import-order
+from packaging import version
 
 if version.parse(tf.version.VERSION) >= version.parse("2.10"):
     # Ignore pylint errors as keras module is not available in TF 2.4
-    from keras.engine.base_layer_utils import is_subclassed  # pylint: disable=import-error
-    from keras.engine.functional import Functional  # pylint: disable=import-error
-    from keras.engine.keras_tensor import KerasTensor  # pylint: disable=import-error
-    from keras.layers.core.tf_op_layer import TFOpLambda  # pylint: disable=import-error
-    from keras.layers.merging.base_merge import _Merge as MergeLayersParentClass  # pylint: disable=import-error
+    from keras.engine.base_layer_utils import is_subclassed
+    from keras.engine.functional import Functional
+    from keras.engine.keras_tensor import KerasTensor
+    from keras.layers.core.tf_op_layer import TFOpLambda
+    from keras.layers.merging.base_merge import _Merge as MergeLayersParentClass
 else:
     # Ignore pylint errors due to conditional imports
     from tensorflow.python.keras.engine.base_layer_utils import is_subclassed  # pylint: disable=ungrouped-imports
@@ -567,7 +567,7 @@ class _KerasModelPreparer:
                                             name=_TEMP_MODEL_NAME)
             _logger.debug("Model created for layer '%s'", layer.name)
         except TypeError as e:
-            if "call() got an unexpected keyword argument 'training'" in e.__str__():
+            if "call() got an unexpected keyword argument 'training'" in str(e):
                 _logger.error(
                     "Model preparer calls subclassed layers call functions with the parameter 'training=False', "
                     "in the case that the layer behaves differently during evaluation. Please add **kwargs to your "

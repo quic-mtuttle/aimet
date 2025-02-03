@@ -37,10 +37,11 @@
 
 """Code to override Keras LSTM classes"""
 
+import sys
 from typing import Union
 import tensorflow as tf
 from tensorflow.python.platform import tf_logging as logging
-from packaging import version  # pylint: disable=wrong-import-order
+from packaging import version
 
 if version.parse(tf.version.VERSION) >= version.parse("2.10"):
     # pylint: disable=ungrouped-imports
@@ -48,11 +49,11 @@ if version.parse(tf.version.VERSION) >= version.parse("2.10"):
     from tensorflow import config
 
     # Ignore pylint errors as keras module is not available in TF 2.4
-    from keras import activations # pylint: disable=import-error
-    from keras import backend # pylint: disable=import-error
-    from keras import regularizers # pylint: disable=import-error
-    from keras.engine.input_spec import InputSpec # pylint: disable=import-error
-    from keras.layers.rnn import LSTM # pylint: disable=import-error
+    from keras import activations
+    from keras import backend
+    from keras import regularizers
+    from keras.engine.input_spec import InputSpec
+    from keras.layers.rnn import LSTM
 else:
     from tensorflow.python.framework import config # pylint: disable=ungrouped-imports
     from tensorflow.python.framework import constant_op # pylint: disable=ungrouped-imports
@@ -127,7 +128,7 @@ class QuantizedLSTM(*base_list):
         #Quantization is supported for urolled LSTM only.
         if not unroll:
             logging.error("Only unrolled LSTM can be quantized, as of now. Need to use flag 'unroll=True'")
-            exit()  # pylint: disable=consider-using-sys-exit
+            sys.exit()
 
         self._wrapped_layers = []
         self.is_sequential_model = is_sequential_model
@@ -313,7 +314,7 @@ class QuantizedLSTM(*base_list):
         # The input should be dense, padded with zeros. If a ragged input is fed
         # into the layer, it is padded and the row lengths are used for masking.
         inputs, row_lengths = backend.convert_inputs_if_ragged(inputs)
-        is_ragged_input = (row_lengths is not None)
+        is_ragged_input = row_lengths is not None
         self._validate_args_if_ragged(is_ragged_input, mask)
 
         # LSTM does not support constants. Ignore it during process.

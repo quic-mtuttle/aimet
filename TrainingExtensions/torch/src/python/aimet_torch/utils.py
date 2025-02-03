@@ -241,6 +241,10 @@ class CachedDataset(Dataset):
 
         return batch
 
+    def __iter__(self):
+        for i in range(self.__len__()):
+            yield self.__getitem__(i)
+
     def _cache_model_inputs(self, data_loader):
         """
         Function to cache number of batches individually in separate file at provided path location
@@ -1026,7 +1030,7 @@ def add_foward_fn_kwargs_to_inputs(module: torch.nn.Module, *args: Tuple[Any], *
             if default != inspect.Parameter.empty:
                 add_args.append(default)
             else:
-                ValueError(f'no value provided for kwarg={k}, which has no defaults')
+                raise ValueError(f'no value provided for kwarg={k}, which has no defaults')
     return tuple([*args, *add_args])
 
 
@@ -1279,7 +1283,7 @@ def load_torch_model_using_safetensors(model_name: str, path: str, filename: str
 
     # Sets the MPP meta data extracted from safetensors file into the model as an atribute
     # so that it can be extracted and saved at the time of weights export.
-    model.__setattr__('mpp_meta', meta_data)
+    setattr(model, 'mpp_meta', meta_data)
     return model
 
 

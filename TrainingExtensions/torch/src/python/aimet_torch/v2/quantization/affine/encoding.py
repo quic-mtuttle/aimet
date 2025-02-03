@@ -46,7 +46,7 @@ from aimet_common.defs import EncodingType
 from aimet_torch.v2.utils import docstring
 from aimet_torch.v2.quantization.base import EncodingBase
 from aimet_torch.v2.quantization.affine.backends import quantize, dequantize, _derive_qmin_qmax
-from ._utils import _GridMixin, _register_signature # pylint: disable=import-error
+from ._utils import _GridMixin, _register_signature
 
 
 __all__ = ["AffineEncoding", "VectorEncoding", "GroupedBlockEncoding"]
@@ -280,7 +280,6 @@ class AffineEncoding(EncodingBase, _GridMixin):
             for min_, max_, scale_, offset_ in zip(min, max, scale, offset)
         ]
 
-    # pylint: disable=no-self-use
     def _get_additional_properties(self) -> Dict[str, Any]:
         return {}
 
@@ -348,8 +347,8 @@ class VectorEncoding(AffineEncoding):
 
     def _to_legacy_format(self):
         encoding = super()._to_legacy_format()
-        for i, _ in enumerate(encoding):
-            encoding[i].update(
+        for e in encoding:
+            e.update(
                 rows_per_block=self.rows_per_block,
                 cols_per_block=self.cols_per_block,
                 vector_dim=self.vector_dim,
