@@ -46,7 +46,8 @@ import copy
 from collections import defaultdict
 from types import SimpleNamespace
 import inspect
-from typing import Tuple, Union, List, Dict, Type, Optional
+from itertools import islice
+from typing import Tuple, Union, List, Dict, Type, Optional, Iterator
 import torch
 
 from aimet_common.connected_graph.connectedgraph_utils import CG_SPLIT
@@ -58,7 +59,7 @@ from aimet_common.utils import AimetLogger
 import aimet_torch._base.nn.modules.custom as aimet_modules
 from aimet_torch.meta.operation import Op
 from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input, in_eval_mode, \
-    is_torch_nn_leaf_module, is_custom_leaf_module, get_torch_tensortype_shape
+    is_torch_nn_leaf_module, get_torch_tensortype_shape
 from aimet_torch import onnx_utils
 import aimet_torch.utils
 
@@ -411,13 +412,19 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
             # functional operations e.g. cat, size etc
             else:
-                aten_nodes = self._find_aten_nodes_in_forward_pass(trace)
-                if elementwise_info and node == aten_nodes[0]:
+                try:
+                    is_elementwise = bool(elementwise_info) and \
+                                     node == next(self._find_aten_nodes_in_forward_pass(trace))
+                except StopIteration:
+                    is_elementwise = False
+
+                if is_elementwise:
                     # Aten op that corresponds to the elementwise op
-                    op_type = self.get_op_type(type(elementwise_info[1]))
+                    residing_module, op_module = elementwise_info
+                    op_type = self.get_op_type(type(op_module))
                     op = self._create_new_multi_output_op(op_type,
-                                                          residing_module=elementwise_info[0],
-                                                          op_module=elementwise_info[1])
+                                                          residing_module=residing_module,
+                                                          op_module=op_module)
                 else:
                     op_type = self._get_functional_node_type(node)
                     op = self._create_new_multi_output_op(op_type, residing_module=model)
@@ -569,9 +576,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             # For elementwise ops, we need to parse the callmethod interior, but want to retain information about the
             # elementwise op's residing module and torch module
             if self._is_multi_input_op_to_parse(subgraph_model):
-                aten_nodes = self._find_aten_nodes_in_forward_pass(subgraph_trace)
-                assert len(aten_nodes) <= 1
-                if len(aten_nodes) == 1:
+                try:
+                    aten_node = next(self._find_aten_nodes_in_forward_pass(subgraph_trace))
+                except StopIteration:
+                    aten_node = None
+
+                if aten_node:
                     elementwise_info = (residing_module, node_name_to_module[input_name])
                 else:
                     # This is an elementwise op that does not actually perform aten operations inside.
@@ -1343,13 +1353,21 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         if isinstance(module, BaseQuantizationMixin):
             return self._is_recursive_parsing_needed(module.get_original_module(), trace)
 
-        recursive_parsing_needed = True
-        if is_torch_nn_leaf_module(module) or \
-                is_custom_leaf_module(module, self._find_aten_nodes_in_forward_pass(trace)) or \
-                isinstance(module, (self._aimet_defined_modules, tuple(aimet_torch.utils.modules_to_treat_as_leaf))):
-            recursive_parsing_needed = False
+        if is_torch_nn_leaf_module(module):
+            return False
 
-        return recursive_parsing_needed
+        if isinstance(module, (self._aimet_defined_modules, *aimet_torch.utils.modules_to_treat_as_leaf)):
+            return False
+
+        is_custom_leaf_module = is_leaf_module(module) and \
+            len(tuple(
+                islice(self._find_aten_nodes_in_forward_pass(trace), 2)
+            )) <= 1
+
+        if is_custom_leaf_module:
+            return False
+
+        return True
 
     @staticmethod
     def _is_multi_input_op_to_parse(module: torch.nn.Module):
@@ -1408,7 +1426,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
     @staticmethod
     def _find_aten_nodes_in_forward_pass(trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule]) \
-            -> List[torch._C.Node]:
+            -> Iterator[torch._C.Node]:
         """
         Find all the valid nodes in forward pass for given trace of model or submodule.
         Three possible outcomes:
@@ -1420,13 +1438,14 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :return: List of trace graph nodes if node.kind() starts with "aten::".
         """
         # pylint: disable=protected-access
-        nodes = []
         try:
-            nodes = [node for node in trace.graph.nodes() if "aten::" in node.kind() and
-                     ConnectedGraph._parse_op_type(node) not in ConnectedGraph.passthrough_graph_nodes]
+            nodes = trace.graph.nodes()
         except RuntimeError:
-            pass
-        return nodes
+            return
+
+        for node in nodes:
+            if "aten::" in node.kind() and ConnectedGraph._parse_op_type(node) not in ConnectedGraph.passthrough_graph_nodes:
+                yield node
 
     @staticmethod
     def _get_functional_node_type(node: torch._C.Node) -> str:
