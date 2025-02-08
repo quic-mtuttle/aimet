@@ -61,7 +61,7 @@ from typing import (
 )
 
 import torch
-from torch.utils._pytree import tree_flatten
+from torch.utils._pytree import tree_flatten, tree_map
 import onnx
 from packaging import version
 from safetensors.numpy import save_file as save_safetensor_file
@@ -77,7 +77,7 @@ from aimet_torch import torchscript_utils, utils, onnx_utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph, Op
 from aimet_torch.quantsim_config.builder import LazyQuantizeWrapper
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
-from aimet_torch._base.nn.modules.custom import MatMul
+from aimet_torch._base.nn.modules.custom import MatMul, Cast
 from aimet_torch.onnx_utils import (
     OnnxSaver,
     OnnxExportApiArgs,
@@ -248,7 +248,7 @@ class _QuantizationSimModelInterface(ABC):
 
 
 class _QuantizationSimModelBase(_QuantizationSimModelInterface):
-    # pylint: disable=too-many-arguments, too-many-instance-attributes, too-many-locals, too-many-public-methods
+    # pylint: disable=too-many-arguments, too-many-instance-attributes, too-many-locals, too-many-public-methods, too-many-statements
     def __init__(self, model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple],
                  quant_scheme: Union[str, QuantScheme] = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest', default_output_bw: int = 8, default_param_bw: int = 8,
@@ -277,6 +277,9 @@ class _QuantizationSimModelBase(_QuantizationSimModelInterface):
                                  Note that the mode default_data_type=QuantizationDataType.float is only supported with
                                  default_output_bw=16 or 32 and default_param_bw=16 or 32.
         """
+        if not isinstance(dummy_input, (tuple, list)):
+            dummy_input = (dummy_input,)
+
         # Perform sanity checks on inputs
         validate_quantsim_inputs(quant_scheme, rounding_mode, default_output_bw, default_param_bw,
                                  default_data_type)
@@ -312,15 +315,36 @@ class _QuantizationSimModelBase(_QuantizationSimModelInterface):
         self._percentile_value = 100 # default percentile value
         self._excluded_layer_names = []
 
-        # Add quantization layers
-        inout_tensor_shapes = utils.get_inout_tensor_shape_per_module(self.model, dummy_input)
-        num_inout_tensors = {
-            module: (len(input_tensor_shapes), len(output_tensor_shapes))
-            for module, (input_tensor_shapes, output_tensor_shapes)
-            in inout_tensor_shapes.items()
-        }
-        inout_tensors_dtypes_for_cast_ops = utils.get_inout_tensors_dtypes_for_cast_modules(self.model, dummy_input)
+        inout_tensor_shapes = {}
+        num_inout_tensors = {}
+        inout_tensors_dtypes_for_cast_ops = {}
 
+        def record_metadata(module, inputs, outputs):
+            input_shapes = tree_map(lambda x: x.shape if isinstance(x, torch.Tensor) else None, inputs)
+            output_shapes = tree_map(lambda x: x.shape if isinstance(x, torch.Tensor) else None, outputs)
+
+            if output_shapes is None or isinstance(output_shapes, torch.Size):
+                output_shapes = (output_shapes,)
+
+            inout_tensor_shapes[module] = (input_shapes, output_shapes)
+            num_inout_tensors[module] = (len(input_shapes), len(output_shapes))
+
+            if isinstance(module, Cast):
+                inp, = inputs
+                out, = outputs
+                inout_tensors_dtypes_for_cast_ops[module] = (inp.dtype, out.dtype)
+
+        handles = []
+        try:
+            for module in self.model.modules():
+                handles.append(module.register_forward_hook(record_metadata))
+            with utils.in_eval_mode(self.model), torch.no_grad():
+                self.model(*dummy_input)
+        finally:
+            for handle in handles:
+                handle.remove()
+
+        # Add quantization layers
         self._add_quantization_wrappers(self.model, num_inout_tensors, default_data_type)
         self._set_tensor_quantizers_for_consts(inout_tensor_shapes)
 
