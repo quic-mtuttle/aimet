@@ -79,7 +79,9 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         model = torchvision.models.resnet18()
         model.eval()
 
-        utils.replace_modules_of_type1_with_type2(model, torch.nn.ReLU, torch.nn.ReLU6)
+        utils.replace_modules(model,
+                              lambda module: isinstance(module, torch.nn.ReLU),
+                              lambda _: torch.nn.ReLU6())
 
         # check - no ReLU modules left in the model anymore
         for module in model.modules():
@@ -94,8 +96,9 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         model = torchvision.models.resnet18()
         model.eval()
 
-        utils.replace_modules_with_instances_of_new_type(model, [model.layer1[0].bn1, model.layer1[1].bn1],
-                                                         torch.nn.Identity)
+        utils.replace_modules(model,
+                              lambda module: module in [model.layer1[0].bn1, model.layer1[1].bn1],
+                              lambda _: torch.nn.Identity())
 
         # check - given modules have been replaced
         self.assertTrue(isinstance(model.layer1[0].bn1, torch.nn.Identity))

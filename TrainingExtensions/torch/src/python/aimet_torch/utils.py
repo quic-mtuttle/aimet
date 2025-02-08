@@ -570,66 +570,18 @@ def get_ordered_list_of_modules(model: torch.nn.Module,
     return list_modules
 
 
-def replace_modules_of_type1_with_type2(model: torch.nn.Module,
-                                        type1: type(torch.nn.Module), type2: type(torch.nn.Module)):
+def replace_modules(model: torch.nn.Module,
+                    condition: Callable[[torch.nn.Module], bool],
+                    factory: Callable[[torch.nn.Module], torch.nn.Module]):
     """
-    Given a model, finds all modules of type type1 and replaces them with instances of type2
-    Note: Since instances of type2 are instantiated using a default constructor (no parameters),
-    only certain module types e.g. torch.nn.ReLU can be used as type2
-    :param model: Model to replace modules in
-    :param type1: Module type of modules to replace
-    :param type2: Module type to instantiate to replace modules with
-    :return: None
+    Replace all modules that satisfy the given condition
     """
+    def fn(parent):
+        for name, child in parent.named_children():
+            if condition(child):
+                setattr(parent, name, factory(child))
 
-    for module_name, module_ref in model.named_children():
-        if isinstance(module_ref, type1):
-            setattr(model, module_name, type2())
-
-        children_module_list = list(module_ref.modules())
-        if len(children_module_list) != 1:
-            replace_modules_of_type1_with_type2(module_ref, type1, type2)
-
-
-def replace_modules_of_type1_using_constructor(model, type1, constructor):
-    """
-    Given a model, finds all modules of type type1 and replaces them with the module created with constructor
-    constructor should accept original module as an argument
-    :param model: Model to replace modules in
-    :param type1: Module type of modules to replace
-    :param constructor: Constructor of the new module
-    :return: None
-    """
-
-    for module_name, module_ref in model.named_children():
-        if isinstance(module_ref, type1):
-            setattr(model, module_name, constructor(module_ref))
-
-        children_module_list = list(module_ref.modules())
-        if len(children_module_list) != 1:
-            replace_modules_of_type1_using_constructor(module_ref, type1, constructor)
-
-
-def replace_modules_with_instances_of_new_type(model: torch.nn.Module, modules_to_replace_list: List[torch.nn.Module],
-                                               new_type: type(torch.nn.Module)):
-    """
-    Given a model, replaces given modules with instances of new_type
-    Note: Since instances of new_type are instantiated using a default constructor (no parameters),
-    only certain module types e.g. torch.nn.ReLU can be used as new_type
-    :param model: Model to replace modules in
-    :param modules_to_replace_list: Modules to replace
-    :param new_type: Module type to instantiate to replace modules with
-    :return: None
-    """
-
-    for module_name, module_ref in model.named_children():
-
-        if module_ref in modules_to_replace_list:
-            setattr(model, module_name, new_type())
-
-        children_module_list = list(module_ref.modules())
-        if len(children_module_list) != 1:
-            replace_modules_with_instances_of_new_type(module_ref, modules_to_replace_list, new_type)
+    model.apply(fn)
 
 
 def create_rand_tensors_given_shapes(input_shape: Union[Tuple, List[Tuple]], device: torch.device) \
