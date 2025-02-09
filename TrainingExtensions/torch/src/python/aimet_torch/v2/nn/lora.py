@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2024-25, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -49,8 +49,8 @@ except ImportError:
 else:
     import torch
     from torch import nn
-    from aimet_torch.v2.nn import QuantizationMixin, custom
-    from aimet_torch.v2.nn.true_quant import _dispatch
+    from .true_quant import QuantizationMixin, _dispatch
+    from .modules.custom import QuantizedAdd, QuantizedMultiply
 
 
     class _TensorDict(torch.nn.ParameterDict): # pylint: disable=abstract-method
@@ -66,15 +66,14 @@ else:
             return ret
 
 
-    @QuantizationMixin.implements(lora.Linear)
-    class QuantizedLinear(QuantizationMixin, lora.Linear): # pylint: disable=too-many-ancestors
+    class QuantizedLora(QuantizationMixin):
         """
-        Quantized lora.Linear.
+        Base class for Quantized lora layers
         """
 
         # NOTE: The implementation of this class is tightly dependent on below assumptions
-        #   1) LoRA scale (``self.scaling``) will be always multiplied with the output of lora adapters.
-        #   2) The scaled output of LoRA adapters will be always added to  the output of the base layer.
+        #   1) LoRA scale (``self.scaling``) will be multiplied with the output of lora adapters.
+        #   2) The scaled output of LoRA adapters will be added to  the output of the base layer.
 
         def __quant_init__(self):
             super().__quant_init__()
@@ -83,18 +82,20 @@ else:
             self.input_quantizers = nn.ModuleList([])
             self.output_quantizers = nn.ModuleList([])
 
+            # pylint: disable=no-member
             self.scaling = _TensorDict(self.scaling)
+
             self.mul = nn.ModuleDict({
-                adapter_name: custom.QuantizedMultiply() for adapter_name in self.lora_A.keys()
+                adapter_name: QuantizedMultiply() for adapter_name in self.lora_A.keys()
             })
             self.add = nn.ModuleDict({
-                adapter_name: custom.QuantizedAdd() for adapter_name in self.lora_A.keys()
+                adapter_name: QuantizedAdd() for adapter_name in self.lora_A.keys()
             })
 
         def _mul(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
             """
-            Implementation of elemeentwise add which will be dispatched in place of
-            torch.Tensor.add and torch.add during forward.
+            Implementation of elementwise add which will be dispatched in place of
+            torch.Tensor.mul and torch.mul during forward.
 
             This function will invoke self.mul (type: QuantizedMultipy) if any of x and y
             is an entry of self.scaling.
@@ -120,7 +121,7 @@ else:
 
         def _add(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
             """
-            Implementation of elemeentwise add which will be dispatched in place of
+            Implementation of elementwise add which will be dispatched in place of
             torch.Tensor.add and torch.add during forward.
 
             This function will invoke self.add (type: QuantizedAdd) if any of x and y
@@ -144,8 +145,8 @@ else:
 
             return out
 
-        def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor: # pylint: disable=arguments-differ
-            with _dispatch(torch.Tensor.mul, self._mul), _dispatch(torch.mul, self._mul),\
+        def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:  # pylint: disable=arguments-differ
+            with _dispatch(torch.Tensor.mul, self._mul), _dispatch(torch.mul, self._mul), \
                     _dispatch(torch.Tensor.add, self._add), _dispatch(torch.add, self._add):
                 return super().forward(x, *args, **kwargs)
 
@@ -169,3 +170,21 @@ else:
 
         def get_delta_weight(self, adapter) -> torch.Tensor:
             raise NotImplementedError
+
+
+    @QuantizationMixin.implements(lora.Linear)
+    class QuantizedLinear(QuantizedLora, lora.Linear): # pylint: disable=too-many-ancestors
+        """
+        Quantized lora.Linear.
+        """
+
+        # NOTE: The implementation of this class is tightly dependent on below assumptions
+        #   1) LoRA scale (``self.scaling``) will be multiplied with the output of lora adapters.
+        #   2) The scaled output of LoRA adapters will be added to  the output of the base layer.
+
+
+    @QuantizationMixin.implements(lora.Conv2d)
+    class QuantizedConv(QuantizedLora, lora.Conv2d):  # pylint: disable=too-many-ancestors
+        """
+        Quantized lora.Conv2d.
+        """
