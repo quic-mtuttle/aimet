@@ -36,7 +36,9 @@
 //
 //==============================================================================
 
+#include "test_quantization_lib.hpp"
 #include "quantization_utils.hpp"
+#include "tensor_utils.hpp"
 #include <gtest/gtest.h>
 #include <random>
 #include <cmath>
@@ -299,4 +301,215 @@ TEST_F(TestUtilitiesCpu, SANITY_QuantizeSingleChannelPerBlockScale) {
             ASSERT_LE(abs(scale[i] - perBlockIntScale[i]*perChannelScale), perChannelScale / 2.0);
         }
     }
+}
+
+
+template <typename TypeParam>
+class TestUtilitiesCpuGpu : public ::testing::Test
+{};
+
+TYPED_TEST_CASE(TestUtilitiesCpuGpu, TestDataTypesAndDevices);
+
+TYPED_TEST(TestUtilitiesCpuGpu, TensorBlockPermute)
+{
+    if (!CheckRunTest<TypeParam>())
+        return;
+
+    typedef typename TypeParam::dataType DataType;
+
+    const int numElements = 16;
+
+    DataType in[numElements] = {1.0f, 2.0f,     3.0f, 4.0f,
+                             5.0f, 6.0f,     7.0f, 8.0f,
+                             9.0f, 10.0f,    11.0f, 12.0f,
+                             13.0f, 14.0f,   15.0f, 16.0f};
+
+    DataType out[numElements];
+
+    std::vector<int64_t> inputShape = {2, 2, 2, 2};
+    std::vector<size_t> order = {0, 3, 1, 2};
+
+    DataType expected[numElements] = {1.0f,  3.0f,  5.0f,  7.0f,
+                                      2.0f,  4.0f,  6.0f,  8.0f,
+                                      9.0f, 11.0f, 13.0f, 15.0f,
+                                      10.0f, 12.0f, 14.0f, 16.0f};
+
+    Blob<TypeParam> inputBlob(in, numElements);
+    Blob<TypeParam> outputBlob(out, numElements);
+
+    permute(inputBlob.getDataPtrOnDevice(), outputBlob.getDataPtrOnDevice(), inputShape, order, TypeParam::modeCpuGpu);
+    DataType* output = outputBlob.getDataPtrOnCpu();
+
+    for (int i = 0; i < numElements; i++)
+    {
+        EXPECT_EQ(output[i], expected[i]);
+    }
+
+}
+
+
+TYPED_TEST(TestUtilitiesCpuGpu, TensorBlockPermute2) {
+
+    if (!CheckRunTest<TypeParam>())
+        return;
+
+    typedef typename TypeParam::dataType DataType;
+
+    const int numElements = 64;
+    const int outDims = 4;
+    const int numElementsPerEncoding = 8;
+
+
+    DataType inp[4][2][2][4];   // becomes [4][2][2][4]
+    DataType* in = &inp[0][0][0][0];
+    DataType enc[4][1][2][1];  // becomes [4][1][2][1]
+    std::vector<size_t> order = {0, 2, 1, 3};
+    std::vector<int64_t> encodingStrides = {2, 0, 1, 0};
+    std::vector<int64_t> inputStrides = {16, 8, 4, 1};
+
+    std::vector<int64_t> inputShape = {4, 2, 8};
+
+    DataType out[4 * 2 * 8];
+
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 2; j++)
+        {
+            for (int k = 0; k < 2; k++)
+            {
+                for (int m = 0; m < 4; m++)
+                {
+                    inp[i][j][k][m] = static_cast<DataType>(k) + 2.0f * static_cast<DataType>(i);
+                }
+            }
+        }
+    }
+
+    DataType expected[numElements];
+    for (int i = 0; i < numElements; i++)
+    {
+        expected[i] = static_cast<DataType>(i / numElementsPerEncoding);
+    }
+
+    Blob<TypeParam> inputBlob(in, numElements);
+    Blob<TypeParam> outputBlob(out, numElements);
+
+    permute(inputBlob.getDataPtrOnDevice(), outputBlob.getDataPtrOnDevice(), inputShape, order, TypeParam::modeCpuGpu);
+    DataType* output = outputBlob.getDataPtrOnCpu();
+
+        // Check the results
+    for (int i = 0; i < numElements; i++)
+    {
+        EXPECT_EQ(output[i], expected[i]);
+    }
+
+}
+
+TYPED_TEST(TestUtilitiesCpuGpu, TensorBlockPermute3) {
+
+    if (!CheckRunTest<TypeParam>())
+        return;
+
+    typedef typename TypeParam::dataType DataType;
+
+    const int numElements = 16;
+
+    DataType in[numElements] = {1.0f, 2.0f,     3.0f, 4.0f,
+                             5.0f, 6.0f,     7.0f, 8.0f,
+                             9.0f, 10.0f,    11.0f, 12.0f,
+                             13.0f, 14.0f,   15.0f, 16.0f};
+
+    DataType out[numElements];
+
+
+    std::vector<int64_t> inputShape = {4, 2, 2};
+    std::vector<int64_t> encodingShape = {2, 1};
+    std::vector<int64_t> inputStrides = {4, 2, 1};
+    std::vector<int64_t> encodingStrides = {0, 1, 0};
+    std::vector<size_t> order = {1, 0, 2};
+
+    // Check the results
+    DataType expected[numElements] = {1.0f, 2.0f,   5.0f, 6.0f,
+                                      9.0f, 10.0f,  13.0f, 14.0f,
+                                      3.0f, 4.0f,   7.0f, 8.0f,
+                                      11.0f, 12.0f, 15.0f, 16.0f};
+
+    Blob<TypeParam> inputBlob(in, numElements);
+    Blob<TypeParam> outputBlob(out, numElements);
+
+    permute(inputBlob.getDataPtrOnDevice(), outputBlob.getDataPtrOnDevice(), inputShape, order, TypeParam::modeCpuGpu);
+    DataType* output = outputBlob.getDataPtrOnCpu();
+
+    for (int i = 0; i < numElements; i++)
+    {
+        EXPECT_EQ(output[i], expected[i]);
+    }
+
+}
+
+TEST(TestUtilities, TestGetNumel)
+{
+    EXPECT_EQ(getNumel({1, 1, 1}), 1);
+    EXPECT_EQ(getNumel({1, 2, 3}), 6);
+    EXPECT_EQ(getNumel({40, 128, 23, 1, 3}), 40 * 128 * 23 * 3);
+    EXPECT_EQ(getNumel({}), 1);
+}
+
+TEST(TestUtilities, TestShapeToStrides)
+{
+    TensorDims shape = {5, 4, 3, 2};
+    TensorDims expected = {24, 6, 2, 1};
+    EXPECT_EQ(shapeToStrides(shape), expected);
+
+    shape = {10};
+    expected = {1};
+    EXPECT_EQ(shapeToStrides(shape), expected);
+
+    shape = {1, 10};
+    expected = {10, 1};
+    EXPECT_EQ(shapeToStrides(shape), expected);
+}
+
+TEST(TestUtilities, TesthasContiguousBlocks)
+{
+    TensorDims tensorShape = {8, 4, 2};
+    TensorDims encodingShape = {4, 4, 1};
+    EXPECT_FALSE(hasContiguousBlocks(tensorShape, encodingShape));
+
+    tensorShape = {};
+    encodingShape = {};
+    EXPECT_TRUE(hasContiguousBlocks(tensorShape, encodingShape));
+
+    tensorShape = {1, };
+    encodingShape = {1, };
+    EXPECT_TRUE(hasContiguousBlocks(tensorShape, encodingShape));
+
+    tensorShape = {10, 4, 1};
+    encodingShape = {};
+    EXPECT_TRUE(hasContiguousBlocks(tensorShape, encodingShape));
+
+    tensorShape = {10, 4, 2};
+    encodingShape = {10, 1, 1};
+    EXPECT_TRUE(hasContiguousBlocks(tensorShape, encodingShape));
+
+    tensorShape = {10, 4, 2};
+    encodingShape = {10, 2, 1};
+    EXPECT_TRUE(hasContiguousBlocks(tensorShape, encodingShape));
+
+    tensorShape = {10, 4, 2};
+    encodingShape = {5, 1, 1};
+    EXPECT_TRUE(hasContiguousBlocks(tensorShape, encodingShape));
+
+    tensorShape = {10, 4, 2};
+    encodingShape = {4, 1};
+    EXPECT_FALSE(hasContiguousBlocks(tensorShape, encodingShape));
+
+    tensorShape = {10, 4, 2};
+    encodingShape = {2};
+    EXPECT_FALSE(hasContiguousBlocks(tensorShape, encodingShape));
+
+    tensorShape = {10, 4, 2};
+    encodingShape = {2, 2};
+    EXPECT_FALSE(hasContiguousBlocks(tensorShape, encodingShape));
+
 }
