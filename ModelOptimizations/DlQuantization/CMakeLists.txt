@@ -72,7 +72,6 @@ add_library(MoDlQuantization STATIC
       src/TensorQuantizer.cpp
       src/GraphQuantizer.cpp
       src/Fp16Quantization.cpp
-      src/ParserModule.cpp
 
       include/DlQuantization/IQuantizer.hpp
       include/DlQuantization/Quantization.hpp
@@ -84,8 +83,6 @@ add_library(MoDlQuantization STATIC
       include/DlQuantization/TensorQuantizer.h
       include/DlQuantization/GraphQuantizer.h
       include/DlQuantization/Fp16Quantization.hpp
-      include/DlQuantization/ParserModule.h
-      include/DlQuantization/XmlTypes.h
       include/DlQuantization/EncodingRescale.hpp
       )
 
@@ -104,7 +101,6 @@ target_include_directories(MoDlQuantization
 
 target_link_libraries(MoDlQuantization PUBLIC
     pybind11
-    pugixml
     )
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
