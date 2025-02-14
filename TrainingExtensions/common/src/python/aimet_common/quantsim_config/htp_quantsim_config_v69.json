@@ -142,6 +142,10 @@
     {
       "per_channel_quantization": "False"
     },
+    "LayerNormalization":
+    {
+      "per_channel_quantization": "False"
+    },
     "BatchNormalization":
     {
       "per_channel_quantization": "False",
@@ -175,6 +179,9 @@
 	},
     {
       "op_list": ["Conv", "BatchNormalization", "Relu"]
+    },
+    {
+      "op_list": ["Conv", "Transpose", "Relu"]
     },
     {
       "op_list": ["ConvTranspose", "Relu"]

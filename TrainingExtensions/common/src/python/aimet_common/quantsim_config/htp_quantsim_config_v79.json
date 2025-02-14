@@ -101,7 +101,26 @@
         }
       }
     },
+    "GroupNormalization":
+    {
+      "per_channel_quantization": "False",
+      "params": {
+        "bias":
+        {
+          "is_quantized": "True"
+        }
+      }
+    },
     "LayerNorm":
+    {
+      "per_channel_quantization": "False",
+      "params": {
+        "weight": {
+          "is_symmetric": "False"
+        }
+      }
+    },
+    "LayerNormalization":
     {
       "per_channel_quantization": "False",
       "params": {
@@ -217,6 +236,12 @@
     },
     {
       "op_list": ["Conv", "BatchNormalization", "Relu"]
+    },
+    {
+      "op_list": ["Conv", "Transpose", "Relu"]
+    },
+    {
+      "op_list": ["Conv", "Transpose", "PRelu"]
     },
 	{
       "op_list": ["Conv", "Clip"]
