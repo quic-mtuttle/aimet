@@ -16,6 +16,7 @@ Optimization techniques
     Batch norm re-estimation <bn>
     Analysis tools <analysis tools/index>
     Compression <compression/index>
+    Quantized LoRa <quantized LoRa/index>
 
 :ref:`Adaptive rounding <featureguide-adaround>`
 ================================================
@@ -66,4 +67,9 @@ Analysis tools to automatically identify sensitive areas and hotspots in your pr
 
 Reduces pre-trained model’s Multiply-accumulate(MAC) and memory costs with a minimal drop in accuracy.
 AIMET supports various compression techniques like Weight SVD, Spatial SVD and Channel pruning.
+
+:ref:`Quantized LoRa <featureguide-quantized-lora-index>`
+===================================================
+
+Workflows to perform LoRa (Low-Rank Adaptation) on quantized large models.
 
