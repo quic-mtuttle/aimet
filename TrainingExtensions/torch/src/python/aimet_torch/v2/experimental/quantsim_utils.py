@@ -36,13 +36,15 @@
 # =============================================================================
 """ Experimental quantsim utilities """
 
-from typing import overload, Callable, Type
+from typing import overload, Callable, Sequence, Type
 import torch
 
 from aimet_common.utils import AimetLogger
 from aimet_common.connected_graph.product import Product
 from aimet_torch.meta.connectedgraph import Op
+from aimet_torch.v2._builder import _V2LazyQuantizer
 from aimet_torch.v2.nn import BaseQuantizationMixin, custom
+from aimet_torch.v2.nn.true_quant import QuantizationMixin
 from aimet_torch.v2.quantization.affine.quantizer import AffineQuantizerBase
 from aimet_torch.v2.quantsim import QuantizationSimModel
 
@@ -264,3 +266,98 @@ def set_matmul_second_input_producer_to_8bit_symmetric(sim: 'QuantizationSimMode
                 target_quantizer.qmin = -128
                 target_quantizer.qmax = 127
                 target_quantizer.symmetric = True
+
+
+class QuantizedMaskAdd(torch.nn.Module):
+    # pylint: disable=missing-class-docstring
+    def __init__(self):
+        super().__init__()
+        self.nullrequant = QuantizationMixin.from_module(custom.NullRequant())
+        self.add = QuantizationMixin.from_module(custom.Add())
+
+    # pylint: disable=redefined-builtin
+    def forward(self, input: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        """
+        Get shape from input to avoid graph optimization in
+        `torch.onnx.utils._optimize_graph` for multiple Reshape ops when sim.export()
+        """
+        bsz, _, seq_len, ctx_len = input.shape
+        return self.add(input, self.nullrequant(mask, [bsz, -1, seq_len, ctx_len]))
+
+
+@overload
+def apply_requant_mask(sim: QuantizationSimModel,
+                       module_list: Sequence[torch.nn.Module]):
+    """
+    Apply adaptive quantized attention mask for given module list.
+    Args:
+      sim: QuantizationSimModel
+      module_list: A Sequence of module that should be considered
+                   a MaskAdd operator
+    """
+
+
+@overload
+def apply_requant_mask(sim: QuantizationSimModel,
+                       condition: Callable[[torch.nn.Module], bool]):
+    """
+    Apply adaptive quantized attention mask for submodule of sim whose condition(submodule) is True.
+    Args:
+      sim: QuantizationSimModel
+      condition: A function that takes each submodule of sim.model,
+                 and return True/False to indicate if the submodule should be
+                 considered a MaskAdd operator
+    """
+
+
+def apply_requant_mask(sim: QuantizationSimModel,
+                       arg):
+    """
+    Apply adaptive quantized attention mask to sim model of LLMs.
+    """
+    # pylint: disable=protected-access
+    if isinstance(arg, Sequence):
+        module_list = arg
+        condition = lambda module: module in module_list
+    else:
+        condition = arg
+
+    mask_add_names, mask_add_act_mins, mask_maxs = [], [], []
+    for name, module in sim.model.named_modules():
+        if condition(module):
+            mask_index = 0
+            if module.input_quantizers[1] is not None and \
+                (not module.input_quantizers[1].is_initialized() or
+                (module.input_quantizers[1].is_initialized() and torch.equal(module.input_quantizers[1].max,
+                                                                             torch.zeros_like(module.input_quantizers[1].max)))):
+                mask_index = 1
+            q_mask_add = QuantizedMaskAdd()
+            q_mask_add.nullrequant.input_quantizers[0] = _V2LazyQuantizer(module.input_quantizers[mask_index].bitwidth,
+                                                                          sim._rounding_mode,
+                                                                          sim._quant_scheme,
+                                                                          module.input_quantizers[mask_index].symmetric,
+                                                                          enabled_by_default=True
+                                                                          ).realize()
+            q_mask_add.nullrequant.output_quantizers[0] = _V2LazyQuantizer(module.input_quantizers[mask_index].bitwidth,
+                                                                           sim._rounding_mode,
+                                                                           sim._quant_scheme,
+                                                                           module.input_quantizers[mask_index].symmetric,
+                                                                           enabled_by_default=True
+                                                                           ).realize()
+            q_mask_add.add.output_quantizers[0] = module.output_quantizers[0]
+            setattr(sim.model, name, q_mask_add)
+            if module.input_quantizers[mask_index].is_initialized() and module.output_quantizers[0].is_initialized():
+                mask_add_names.append(name)
+                mask_add_act_mins.append(module.output_quantizers[0].min)
+                mask_maxs.append(module.input_quantizers[mask_index].max)
+            else:
+                logger.warning("The quantizers for %s may remain uninitialized "
+                                "only if sim model is about to use `load_encodings`", str(name))
+
+    if mask_add_names:
+        mask_add_act_global_min = min(mask_add_act_mins)
+        for name, mask_add_act_min, mask_max in zip(mask_add_names, mask_add_act_mins, mask_maxs):
+            sim.model.get_submodule(name).nullrequant.input_quantizers[0].set_range(mask_add_act_global_min,
+                                                                                    mask_max)
+            sim.model.get_submodule(name).nullrequant.output_quantizers[0].set_range(mask_add_act_min,
+                                                                                     mask_max)
