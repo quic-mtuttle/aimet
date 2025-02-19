@@ -36,11 +36,13 @@
 # =============================================================================
 
 import contextlib
+import copy
 import itertools
 import json
 import os
 import tempfile
 import tracemalloc
+import functools
 
 import onnx.numpy_helper
 import torch
@@ -53,6 +55,7 @@ from onnxsim import simplify
 
 from aimet_common import quantsim
 from aimet_common import libquant_info
+from aimet_common import _libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType, EncodingType
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim, set_blockwise_quantization_for_weights, _apply_constraints, clamp_activation_encodings, \
@@ -577,6 +580,8 @@ class TestQuantSim:
 
     @pytest.mark.parametrize('strict', [False, True])
     def test_load_encodings_strict_and_non_strict(self, strict):
+        torch.random.manual_seed(0)
+        np.random.seed(0)
         model = single_residual_model().model
 
         # Update weights for testing is_unsigned_symmetric override later
@@ -635,6 +640,162 @@ class TestQuantSim:
                 assert sim.get_qc_quantize_op()[weight_initializers[3]].use_unsigned_symmetric
                 assert len(mismatched_encodings) == 8
                 assert np.allclose(out2, out3)
+
+    @pytest.mark.parametrize('swap_quantizer_func, is_lpbq', [(functools.partial(set_grouped_blockwise_quantization_for_weights,
+                                                                                 op_types=("MatMul", "Conv", "Gemm"),
+                                                                                 decompressed_bw=8,
+                                                                                 strict=False), True),
+                                                              (functools.partial(set_blockwise_quantization_for_weights,
+                                                                                 op_types=("MatMul", "Conv", "Gemm"),
+                                                                                 strict=False,
+                                                                                 symmetric=True), False)])
+    def test_load_per_block_and_lpbq_encodings(self, swap_quantizer_func, is_lpbq):
+        torch.manual_seed(0)
+        np.random.seed(0)
+        model = single_residual_model()
+        model_2 = copy.deepcopy(model)
+        model_3 = copy.deepcopy(model)
+        dummy_input = make_dummy_input(model.model)
+        bq_layers = ("MatMul", "Conv", "Gemm")
+        bq_weights = set()
+
+        for node in model.graph().node:
+            if node.op_type in bq_layers:
+                bq_weights.add(node.input[1])
+
+        # Input shape is not compatible with block size
+        bq_weights.remove(model.graph().node[0].input[1])
+
+        sim = QuantizationSimModel(model, dummy_input, default_param_bw=16, default_activation_bw=16)
+        swap_quantizer_func(sim=sim, bitwidth=4, block_size=4)
+
+        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+        out1 = sim.session.run(None, dummy_input)
+        with tempfile.TemporaryDirectory() as tempdir, set_encoding_version('1.0.0'):
+            sim.export(tempdir, 'export')
+
+            sim_2 = QuantizationSimModel(model_2, dummy_input, default_param_bw=16, default_activation_bw=16)
+            swap_quantizer_func(sim=sim_2, bitwidth=4, block_size=4)
+
+            load_encodings_to_sim(sim_2, os.path.join(tempdir, 'export.encodings'), strict=True)
+            out2 = sim_2.session.run(None, dummy_input)
+            sim_2.export(tempdir, 'export_2')
+            with open(os.path.join(tempdir, 'export.encodings'), 'rb') as f1:
+                encodings_1 = json.load(f1)
+            with open(os.path.join(tempdir, 'export_2.encodings'), 'rb') as f2:
+                encodings_2 = json.load(f2)
+            assert encodings_1 == encodings_2
+            seen_lpbq_or_per_block = False
+            for encoding in encodings_1['param_encodings']:
+                if is_lpbq:
+                    if encoding['enc_type'] == 'LPBQ':
+                        seen_lpbq_or_per_block = True
+                else:
+                    if encoding['enc_type'] == 'PER_BLOCK':
+                        seen_lpbq_or_per_block = True
+            assert seen_lpbq_or_per_block
+            assert np.allclose(out1, out2)
+
+            sim_3 = QuantizationSimModel(model_3, dummy_input, default_param_bw=16, default_activation_bw=16)
+
+            # TODO: switch to strict=True when we support swapping to LPBQ quantizer from non-LPBQ quantizer
+            if is_lpbq:
+                with pytest.raises(AssertionError):
+                    load_encodings_to_sim(sim_3, os.path.join(tempdir, 'export.encodings'), strict=False)
+
+    @pytest.mark.parametrize('swap_quantizer_func, is_lpbq', [(functools.partial(set_grouped_blockwise_quantization_for_weights,
+                                                                                 op_types=("ConvTranspose",),
+                                                                                 decompressed_bw=8,
+                                                                                 strict=True), True),
+                                                              (functools.partial(set_blockwise_quantization_for_weights,
+                                                                                 op_types=("ConvTranspose",),
+                                                                                 strict=True,
+                                                                                 symmetric=True), False)
+                                                              ])
+    def test_load_per_block_and_lpbq_conv_transpose(self, swap_quantizer_func, is_lpbq):
+        torch.manual_seed(0)
+        np.random.seed(0)
+        model = models_for_tests.pointwise_convtranspose1d((1, 64, 32))
+        model_2 = copy.deepcopy(model)
+        sim = QuantizationSimModel(model)
+        swap_quantizer_func(sim=sim, bitwidth=4, block_size=4)
+        dummy_input = make_dummy_input(model)
+
+        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+        out1 = sim.session.run(None, dummy_input)
+        with tempfile.TemporaryDirectory() as tempdir, set_encoding_version('1.0.0'):
+            sim.export(tempdir, 'export')
+
+            sim2 = QuantizationSimModel(model_2)
+            swap_quantizer_func(sim=sim2, bitwidth=4, block_size=4)
+
+            load_encodings_to_sim(sim2, os.path.join(tempdir, 'export.encodings'), strict=True)
+            out2 = sim2.session.run(None, dummy_input)
+
+            sim2.export(tempdir, 'export_2')
+            with open(os.path.join(tempdir, 'export.encodings'), 'rb') as f1:
+                encodings_1 = json.load(f1)
+            with open(os.path.join(tempdir, 'export_2.encodings'), 'rb') as f2:
+                encodings_2 = json.load(f2)
+            assert encodings_1 == encodings_2
+            seen_lpbq_or_per_block = False
+            for encoding in encodings_1['param_encodings']:
+                if is_lpbq:
+                    if encoding['enc_type'] == 'LPBQ':
+                        seen_lpbq_or_per_block = True
+                else:
+                    if encoding['enc_type'] == 'PER_BLOCK':
+                        seen_lpbq_or_per_block = True
+            assert seen_lpbq_or_per_block
+            assert encodings_1['param_encodings']
+            assert np.allclose(out1, out2)
+
+    @pytest.mark.parametrize('strict', [False])
+    def test_mismatching_lpbq_settings(self, strict):
+        torch.manual_seed(0)
+        np.random.seed(0)
+        model = single_residual_model()
+        model_2 = copy.deepcopy(model)
+        dummy_input = make_dummy_input(model.model)
+
+        sim = QuantizationSimModel(model, dummy_input, default_param_bw=16, default_activation_bw=16)
+        set_grouped_blockwise_quantization_for_weights(sim,
+                                                       op_types=("MatMul", "Conv", "Gemm"),
+                                                       bitwidth=4,
+                                                       decompressed_bw=8,
+                                                       block_size=4,
+                                                       strict=False)
+
+        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+        out1 = sim.session.run(None, dummy_input)
+        with tempfile.TemporaryDirectory() as tempdir, set_encoding_version('1.0.0'):
+            sim.export(tempdir, 'export')
+
+            sim_2 = QuantizationSimModel(model_2, dummy_input, default_param_bw=16, default_activation_bw=16)
+            set_grouped_blockwise_quantization_for_weights(sim_2,
+                                                           op_types=("MatMul", "Conv", "Gemm"),
+                                                           bitwidth=2,
+                                                           decompressed_bw=4,
+                                                           block_size=2,
+                                                           strict=False)
+
+            sim_2.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+            out2 = sim_2.session.run(None, dummy_input)
+            assert not np.allclose(out1, out2)
+
+            if strict:
+                with pytest.raises(AssertionError):
+                    load_encodings_to_sim(sim_2, os.path.join(tempdir, 'export.encodings'), strict=strict)
+            else:
+                load_encodings_to_sim(sim_2, os.path.join(tempdir, 'export.encodings'), strict=strict)
+                out2 = sim_2.session.run(None, dummy_input)
+                sim_2.export(tempdir, 'export_2')
+                with open(os.path.join(tempdir, 'export.encodings'), 'rb') as f1:
+                    encodings_1 = json.load(f1)
+                with open(os.path.join(tempdir, 'export_2.encodings'), 'rb') as f2:
+                    encodings_2 = json.load(f2)
+                assert encodings_1 == encodings_2
+                assert np.allclose(out1, out2)
 
     def test_model_with_constants(self):
         model = multi_input_with_constant_model()
@@ -1819,3 +1980,42 @@ class TestEncodingPropagation:
         model = models_for_tests.custom_op_model()
         sim = QuantizationSimModel(model, user_onnx_libs=[get_library_path()])
         assert {"model_input", "output", "model_output", "y", "z"} == sim.qc_quantize_op_dict.keys()
+
+    def test_set_and_freeze_param_encodings(self):
+        torch.manual_seed(0)
+        np.random.seed(0)
+        model = single_residual_model().model
+        model_2 = copy.deepcopy(model)
+        dummy_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+        with tempfile.TemporaryDirectory() as tempdir:
+            sim = QuantizationSimModel(model, path=tempdir)
+            sim.compute_encodings(lambda session, _: session.run(None, dummy_tensor), None)
+            pre_load_out = sim.session.run(None, dummy_tensor)
+            new_encoding = libpymo.TfEncoding()
+            new_encoding.min = -16.0
+            new_encoding.max = 15.875
+            new_encoding.bw = 8
+            new_encoding.delta = .125
+            new_encoding.offset = -128
+            sim.qc_quantize_op_dict['conv3.weight'].load_encodings([new_encoding])
+            post_load_out = sim.session.run(None, dummy_tensor)
+
+            sim.export(tempdir, 'onnx_sim')
+
+            del sim
+
+            sim = QuantizationSimModel(model_2, path=tempdir)
+            sim.compute_encodings(lambda session, _: session.run(None,dummy_tensor), None)
+            pre_load_out_2 = sim.session.run(None, dummy_tensor)
+
+            with open(os.path.join(tempdir, 'onnx_sim.encodings'), 'r') as f:
+                encodings = json.load(f)
+
+            with open(os.path.join(tempdir, 'param_encodings.json'), 'w') as f:
+                json.dump(encodings['param_encodings'], f, sort_keys=True, indent=4)
+
+            sim.set_and_freeze_param_encodings(os.path.join(tempdir, 'param_encodings.json'))
+            post_load_out_2 = sim.session.run(None, dummy_tensor)
+
+            assert np.allclose(pre_load_out, pre_load_out_2)
+            assert np.allclose(post_load_out, post_load_out_2)
