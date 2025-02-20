@@ -729,7 +729,14 @@ class _QuantizationSimModelBase(_QuantizationSimModelInterface):
         :param filename_prefix_encodings: File name prefix to be used when saving encodings.
                                           If None, then user defaults to filename_prefix value
         """
-        if quantsim.encoding_version == '0.6.1':
+        if propagate_encodings and quantsim.encoding_version == '1.0.0':
+            raise RuntimeError('Encoding version 1.0.0 not supported when propagate_encodings is True. To continue using '
+                               'propagate_encodings, fall back to encoding_version 0.6.1 by running the following:\n'
+                               'from aimet_common import quantsim\n'
+                               'quantsim.encoding_version = "0.6.1"'
+                               )
+
+        if quantsim.encoding_version == '0.6.1' and not propagate_encodings:
             msg = _red("Encoding version 0.6.1 will be deprecated in a future release, with version 1.0.0 becoming "
                        "the default. If your code depends on parsing the exported encodings file, ensure that it is "
                        "updated to be able to parse 1.0.0 format.\n"

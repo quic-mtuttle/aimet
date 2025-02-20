@@ -36,7 +36,7 @@
 # =============================================================================
 
 """ Unit tests for Adaround Weights """
-
+import copy
 import os
 import json
 import tempfile
@@ -83,9 +83,11 @@ class TestAdaround:
             with open(os.path.join(tempdir, 'dummy.encodings')) as json_file:
                 encoding_data = json.load(json_file)
 
-            param_keys = encoding_data.keys()
+            param_names = {encoding['name'] for encoding in encoding_data}
             params = {node.input[1] for node in model.nodes() if node.op_type in AdaroundSupportedModules}
-            assert params.issubset(param_keys)
+            assert params.issubset(param_names)
+
+
 
     @pytest.mark.skip(reason="test requires exact version of torch that the code has built against.")
     def test_apply_adaround_for_custom_op(self):
@@ -139,8 +141,8 @@ class TestAdaround:
         with open(os.path.join(tmpdir, 'dummy.encodings')) as json_file:
             encoding_data = json.load(json_file)
 
-        param_keys = list(encoding_data.keys())
-        assert 'weight' in param_keys
+        param_names = {encoding['name'] for encoding in encoding_data}
+        assert 'weight' in param_names
 
     @pytest.mark.parametrize("model, input_shape", [(models_for_tests.weight_gemm_model(10, 20, True), (1, 10)),])
     def test_adaround_with_dict_input(self, model, input_shape, tmpdir):
@@ -180,8 +182,8 @@ class TestAdaround:
         with open(os.path.join(tmpdir, 'dummy.encodings')) as json_file:
             encoding_data = json.load(json_file)
 
-        param_keys = list(encoding_data.keys())
-        assert 'weight' in param_keys
+        param_names = {encoding['name'] for encoding in encoding_data}
+        assert 'weight' in param_names
 
     @pytest.mark.parametrize("model, input_shape", [(models_for_tests.dynamic_matmul_model(1), (1, 10))])
     def test_adaround_dynamic_matmul(self, model, input_shape, tmpdir):
@@ -266,8 +268,10 @@ class TestAdaround:
 
             with open(os.path.join(tempdir, 'dummy.encodings')) as json_file:
                 encoding_data = json.load(json_file)
-                assert len(encoding_data['conv3.weight']) == 8 # out_channels
-                assert len(encoding_data['conv4.weight']) == 8 # out_channels
+
+                param_encodings = {encoding['name']: encoding for encoding in encoding_data}
+                assert len(param_encodings['conv3.weight']['scale']) == 8 # out_channels
+                assert len(param_encodings['conv4.weight']['scale']) == 8 # out_channels
 
 def dataloader(input_shape: tuple, batch_size=2):
     class DataLoader:
