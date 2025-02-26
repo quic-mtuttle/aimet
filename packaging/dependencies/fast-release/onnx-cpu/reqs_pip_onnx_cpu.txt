@@ -1,0 +1,16 @@
+bokeh
+hvplot
+Jinja2
+jsonschema
+numpy<2
+onnx~=1.16.1
+onnxruntime~=1.18.1
+osqp
+pandas
+psutil
+pybind11
+PyYAML
+scikit-learn
+scipy
+torch
+tqdm
