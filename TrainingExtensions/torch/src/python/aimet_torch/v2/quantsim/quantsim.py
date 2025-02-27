@@ -442,6 +442,8 @@ class QuantizationSimModel(_QuantizationSimModelBase):
                     with utils.in_eval_mode(self.model), torch.no_grad():
                         _ = self.model(*dummy_input)
 
+                # TODO
+                # stack.enter_context(self._concretize_int32_bias_quantizers(dummy_input))
                 return super().export(path, filename_prefix, dummy_input, *args, **kwargs)
 
         finally:
@@ -589,6 +591,40 @@ class QuantizationSimModel(_QuantizationSimModelBase):
             if not utils.is_leaf_module(module):
                 cls._remove_quantization_wrappers(module, list_of_modules_to_exclude)
 
+    @contextlib.contextmanager
+    def _concretize_int32_bias_quantizers(self, args):
+        if not isinstance(args, (tuple, list)):
+            args = (args,)
+
+        handles = []
+        orig_bias_quantizers = {
+            qmodule: qmodule.param_quantizers["bias"]
+            for qmodule in self.qmodules()
+            if "bias" in qmodule.param_quantizers and qmodule.bias is not None
+        }
+
+        try:
+            for qmodule, qtzr in orig_bias_quantizers.items():
+                if qtzr is not None:
+                    # Bias quantizer already exists.
+                    # This means the user created bias quantizer by him/herself
+                    # In this case, we honor the custom bias quantizer defined by the user
+                    continue
+
+                # pylint: disable=protected-access
+                handle = qmodule.register_forward_hook(type(qmodule)._create_int32_bias_quantizer)
+                handles.append(handle)
+            try:
+                self.model(*args)
+            finally:
+                for handle in handles:
+                    handle.remove()
+            yield
+        finally:
+            for qmodule, qtzr in orig_bias_quantizers.items():
+                qmodule.param_quantizers["bias"] = qtzr
+
+
 class _QuantizationSimOnnxExport:
     """
     Helper class for exporting quantized models to ONNX format.
@@ -620,28 +656,25 @@ class _QuantizationSimOnnxExport:
                                "Other quantizer types are not supported.")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.sim._apply_qdq_to_model_parameters(self.sim.model):
+            with self.sim._concretize_int32_bias_quantizers(args), \
+                    self.sim._apply_qdq_to_model_parameters(self.sim.model):
                 tmp_onnx_path = os.path.join(tmp_dir, "quantized_model.onnx")
                 export(self.sim.model, args, tmp_onnx_path, *posargs, **kwargs)
                 onnx_model = onnx.load(tmp_onnx_path)
 
+                param_names = {
+                    f"{layer_name}.{param_name}"
+                    for layer_name, layer in self.sim.model.named_modules()
+                    if isinstance(layer, QuantizationMixin)
+                    for param_name, quantizer in layer.param_quantizers.items()
+                    if quantizer
+                }
+
         tensor_to_encoding_map = remove_quantization_nodes_from_onnx_graph(onnx_model)
         onnx.save(onnx_model, f)
 
-        param_names = []
         param_encodings = {}
         activation_encodings = {}
-
-        for layer_name, layer in self.sim.model.named_modules():
-            if not isinstance(layer, self.sim._quantized_modules):
-                continue
-
-            if isinstance(layer, _QuantizedModuleProtocol) and isinstance(layer.get_original_module(), utils.DROPOUT_TYPES):
-                continue
-
-            for param_name, quantizer in layer.param_quantizers.items():
-                if quantizer:
-                    param_names.append(f"{layer_name}.{param_name}")
 
         for tensor, encoding in tensor_to_encoding_map.items():
             qnn_encoding = encoding.to_qnn_encoding_dict(encoding_version=quantsim.encoding_version)
@@ -671,7 +704,7 @@ class _QuantizationSimOnnxExport:
         onnx_file_path = (f if isinstance(f, str) else f.name)
         encoding_file_path = os.path.splitext(onnx_file_path)[0] + ".encodings"
         with open(encoding_file_path, 'w', encoding='utf-8') as encoding_file:
-            json.dump(encodings_dict, encoding_file, sort_keys=True, indent=4)
+            json.dump(encodings_dict, encoding_file, indent=2)
 
     @staticmethod
     def _has_non_affine_quantizer(module: torch.nn.Module):
