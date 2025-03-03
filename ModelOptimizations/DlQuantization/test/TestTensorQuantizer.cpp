@@ -178,6 +178,37 @@ TEST_F(TestTensorQuantizer, SanityTestComputeEncodingFromDataSymmetricTF)
     EXPECT_EQ(encoding.bw, 8);
 }
 
+// Check that existing tests pass with BlockTensorQuantizer
+TEST_F(TestTensorQuantizer, SanityTestComputeEncodingFromDataSymmetricTFBlocked)
+{
+    auto paramTensor = this->data4;
+    BlockTensorQuantizer tensorQuantizer({}, 8, QUANTIZATION_TF);
+    tensorQuantizer.setStrictSymmetric(true);
+    TensorDims tensorShape = {(TensorDim) paramTensor.size()};
+    ASSERT_FALSE(tensorQuantizer.hasValidStats());
+    tensorQuantizer.updateStats(paramTensor.data(), tensorShape, false);\
+    ASSERT_TRUE(tensorQuantizer.hasValidStats());
+    ASSERT_FALSE(tensorQuantizer.isEncodingValid);
+    auto encoding = tensorQuantizer.computeEncodings(true)[0];
+
+    float expected_max = std::max(std::abs(*std::min_element(paramTensor.begin(), paramTensor.end())),
+                                  std::abs(*std::max_element(paramTensor.begin(), paramTensor.end())));
+
+    // Min and Max will get adjusted slightly to represent an exact zero with one of the quantized values
+    // Adjustment is expected to be less than half a delta worth
+    EXPECT_NEAR(encoding.max, expected_max, encoding.delta / 2 + 1e-4);
+    EXPECT_EQ(encoding.max, -encoding.min);
+
+    // Check that the center value is absolute 0
+    EXPECT_NEAR(encoding.min + encoding.delta * (-encoding.offset), 0, 1e-7);
+
+    EXPECT_FLOAT_EQ(encoding.delta, (encoding.max - encoding.min) / 254);
+
+    // Check that offset is -127 - another check for strict symmetric encodings
+    EXPECT_NEAR(encoding.offset, -127, 0);
+    EXPECT_EQ(encoding.bw, 8);
+}
+
 TEST_F(TestTensorQuantizer, SanityTestComputePartialEncodingDeltaOffsetSymmetricTF)
 {
     auto paramTensor = this->data2;
@@ -295,6 +326,24 @@ TEST_F(TestTensorQuantizer, SANITY_GeneratePerChannelParams)
 }
 
 
+TEST_F(TestTensorQuantizer, SANITY_GeneratePerChannelParamsBlocked)
+{
+    BlockTensorQuantizer tensorQuantizer({3, 1, 1}, 8, QUANTIZATION_TF);
+    tensorQuantizer.updateStats(data1.data(), {2, 3, 2, 2}, false);
+    auto encodings = tensorQuantizer.computeEncodings(false);
+
+    std::vector<TfEncoding> expectedEncodings(3);
+    expectedEncodings[0] = getTfEncoding(0, 15, 8);
+    expectedEncodings[1] = getTfEncoding(0, 19, 8);
+    expectedEncodings[2] = getTfEncoding(0, 23, 8);
+
+    for (uint32_t i = 0; i < encodings.size(); ++i)
+    {
+        EXPECT_TRUE(compareEncodings(encodings[i], expectedEncodings[i]));
+    }
+}
+
+
 // 1. Quantize some per channel data using QuantizePerChannelParamsPacked()
 TEST_F(TestTensorQuantizer, SANITY_QuantizePerChannelTensorPackedAsymmetric)
 {
@@ -391,6 +440,46 @@ TEST_F(TestTensorQuantizer, SANITY_QuantizeDequantizePerChannelTensor)
                                                       false);
 
     ASSERT_EQ(encodings.size(), this->shape2[axis]);
+    ASSERT_EQ(encodings.size(), expectedEncodings.size());
+    for (uint32_t i = 0; i < encodings.size(); ++i)
+    {
+        EXPECT_TRUE(compareEncodings(encodings[i], expectedEncodings[i]));
+    }
+
+    ASSERT_EQ(params_quantized.size(), expectedParams.size());
+    for (uint32_t i = 0; i < expectedParams.size(); ++i)
+    {
+        EXPECT_NEAR(params_quantized[i], expectedParams[i], 0.001);
+        EXPECT_NEAR(params_quantized[i], this->data2[i], 0.06);
+    }
+}
+
+// 1. QuantizeDequantize per channel using Asymmetric mode
+TEST_F(TestTensorQuantizer, SANITY_QuantizeDequantizePerChannelTensorBlocked)
+{
+    TensorDims tensorShape = {1, 4, 5, 3};
+    BlockTensorQuantizer tensorQuantizer({3}, 8, QUANTIZATION_TF);
+
+    std::vector<TfEncoding> expectedEncodings(3);
+    expectedEncodings[0] = getTfEncoding(-15, 13.5, 8);
+    expectedEncodings[1] = getTfEncoding(-14.5, 14, 8);
+    expectedEncodings[2] = getTfEncoding(-14, 14.5, 8);
+
+    std::vector<float> expectedParams = {
+        -14.9765, -14.5294, -13.9706, -13.5235, -12.9647, -12.5176, -11.9588, -11.5118, -10.9529, -10.5059,
+        -9.94706, -9.5,     -9.05294, -8.49412, -8.04706, -7.48824, -7.04118, -6.48235, -6.03529, -5.47647,
+        -5.02941, -4.47059, -4.02353, -3.46471, -3.01765, -2.45882, -2.01176, -1.45294, -1.00588, -0.447059,
+        0,        0.447059, 1.00588,  1.45294,  2.01176,  2.45882,  3.01765,  3.46471,  4.02353,  4.47059,
+        5.02941,  5.47647,  6.03529,  6.48235,  7.04118,  7.48824,  8.04706,  8.49412,  9.05294,  9.5,
+        9.94706,  10.5059,  10.9529,  11.5118,  11.9588,  12.5176,  12.9647,  13.5235,  13.9706,  14.5294};
+
+    tensorQuantizer.updateStats(this->data2.data(), tensorShape, false);
+    auto encodings = tensorQuantizer.computeEncodings(false);
+    tensorQuantizer.setEncodings(encodings);
+
+    std::vector<float> params_quantized(this->data2.size());
+    tensorQuantizer.quantizeDequantize(this->data2.data(), params_quantized.data(), tensorShape, false);
+
     ASSERT_EQ(encodings.size(), expectedEncodings.size());
     for (uint32_t i = 0; i < encodings.size(); ++i)
     {
@@ -620,4 +709,150 @@ TEST_F(TestTensorQuantizer, SanityTestGpu)
     EXPECT_NEAR(quantTensorBlob.getDataPtrOnCpu()[0], 5.0162, HISTOGRAM_BUCKET_SIZE);
 }
 
+TEST_F(TestTensorQuantizer, SanityTestGpuBlocked)
+{
+    BlockTensorQuantizer tensorQuantizer({}, 8, QuantizationMode::QUANTIZATION_TF_ENHANCED);
+
+    float mean   = 2;
+    float stddev = 2;
+    std::normal_distribution<float> distribution(mean, stddev);
+    std::mt19937 generator(1);
+
+    int tensorCount = 6000;
+    std::vector<float> statsTensor(tensorCount);
+    TensorDims tensorShape = {tensorCount};
+
+    for (unsigned int i = 0; i < tensorCount; i++)
+    {
+        statsTensor[i] = distribution(generator);
+    }
+    Blob<GpuDevice<float>> statsTensorBlob(statsTensor.data(), tensorCount);
+
+    tensorQuantizer.setStrictSymmetric(false);
+    tensorQuantizer.setUnsignedSymmetric(false);
+    tensorQuantizer.updateStats(statsTensorBlob.getDataPtrOnDevice(), tensorShape, true);
+    EXPECT_FALSE(tensorQuantizer.isEncodingValid);
+    auto encodings = tensorQuantizer.computeEncodings(false);
+    tensorQuantizer.setEncodings(encodings);
+    TfEncoding encoding = encodings[0];
+    EXPECT_TRUE(tensorQuantizer.isEncodingValid);
+
+    std::vector<float> inputTensor(tensorCount, 5);
+    Blob<GpuDevice<float>> inputTensorBlob(inputTensor.data(), tensorCount);
+
+    std::vector<float> quantizedTensor(tensorCount, 0);
+    Blob<GpuDevice<float>> quantTensorBlob(quantizedTensor.data(), tensorCount);
+
+    tensorQuantizer.quantizeDequantize(inputTensorBlob.getDataPtrOnDevice(), quantTensorBlob.getDataPtrOnDevice(),
+                                       tensorShape, true);
+
+    double MAX = *std::max_element(statsTensor.begin(), statsTensor.end());
+    double MIN = *std::min_element(statsTensor.begin(), statsTensor.end());
+    size_t PDF_SIZE = 512;
+    double HISTOGRAM_BUCKET_SIZE = 3 * (MAX - MIN) / PDF_SIZE;
+    EXPECT_NEAR(encoding.min, MIN, HISTOGRAM_BUCKET_SIZE);
+    EXPECT_NEAR(encoding.max, MAX, HISTOGRAM_BUCKET_SIZE);
+
+    EXPECT_NE(inputTensorBlob.getDataPtrOnCpu()[0], quantTensorBlob.getDataPtrOnCpu()[0]);
+    EXPECT_NEAR(quantTensorBlob.getDataPtrOnCpu()[0], 5.0162, HISTOGRAM_BUCKET_SIZE);
+}
+
 #endif
+
+template <typename TypeParam>
+class TestBlockQuantizerCpuGpu : public ::testing::Test
+{};
+
+TYPED_TEST_CASE(TestBlockQuantizerCpuGpu, TestDeviceTypes);
+
+TYPED_TEST(TestBlockQuantizerCpuGpu, TestBlockQuantizerPerTensorQdq)
+{
+    if (!CheckRunTest<TypeParam>())
+        return;
+
+    typedef typename TypeParam::dataType DataType;
+
+    BlockTensorQuantizer tensorQuantizer({}, 8, QUANTIZATION_TF);
+    Encodings encodings(1);
+    float min = -5;
+    float max = 1;
+    float delta = 6 / 255.;
+    float offset = min / delta;
+    int bw = 8;
+    encodings[0] = {min, max, delta, offset, bw};
+    tensorQuantizer.setEncodings(encodings);
+
+    DataType input[6] = {-7, -5, -3, 0, .1, 2.5};
+    DataType output[6];
+
+    Blob<TypeParam> inputBlob(input, 6);
+    Blob<TypeParam> outputBlob(output, 6);
+    bool useCuda = TypeParam::modeCpuGpu == COMP_MODE_GPU;
+    tensorQuantizer.quantizeDequantize(inputBlob.getDataPtrOnDevice(), outputBlob.getDataPtrOnDevice(),
+                                       {6, 1}, useCuda);
+
+    for (int i = 0; i < 6; i++)
+    {
+        DataType clipped = std::max(std::min(input[i], max), min);
+        DataType expected = (std::round(clipped / delta - offset) + offset) * delta;
+        EXPECT_NEAR(outputBlob.getDataPtrOnCpu()[i], expected, 0.001);
+    }
+}
+
+TYPED_TEST(TestBlockQuantizerCpuGpu, TestBlockQuantizationEndToEnd)
+{
+    if (!CheckRunTest<TypeParam>())
+        return;
+
+    typedef typename TypeParam::dataType DataType;
+
+    bool symmetric = true;
+    int numElements = 12;
+    TensorDims inputShape = {2, 6};
+    TensorDims quantizerShape = {2, 2};
+    BlockTensorQuantizer tensorQuantizer(quantizerShape, 8, QUANTIZATION_TF);
+
+    DataType in[numElements] = {
+        -5.4f, 10.f, -2.f,
+        3.5f, 23.1f, 2.f,
+        -10.f, -2.f, -1.f,
+        -.1f, 0.3f, 0.1f
+    };
+    DataType out[numElements];
+
+    Blob<TypeParam> inputBlob(in, numElements);
+    Blob<TypeParam> outputBlob(out, numElements);
+    bool useCuda = TypeParam::modeCpuGpu == COMP_MODE_GPU;
+    tensorQuantizer.updateStats(inputBlob.getDataPtrOnDevice(), inputShape, useCuda);
+    auto encodings = tensorQuantizer.computeEncodings(symmetric);
+    tensorQuantizer.setEncodings(encodings);
+
+    DataType expectedMax[4] = {10.f, 23.1f, 10.f, .3f};
+    for (size_t i = 0; i < 4; i++)
+    {
+        auto enc = encodings[i];
+        EXPECT_NEAR(enc.max, expectedMax[i], 0.001);
+        EXPECT_NEAR(enc.min + encodings[i].max, -1 * encodings[i].delta, 0.001);
+        EXPECT_EQ(enc.offset, -128);
+        EXPECT_NEAR(enc.delta, enc.max / 127, 0.001);
+    }
+
+    tensorQuantizer.quantizeDequantize(inputBlob.getDataPtrOnDevice(), outputBlob.getDataPtrOnDevice(),
+                                       inputShape, useCuda);
+
+    for (int i = 0; i < numElements; i++)
+    {
+        auto enc = encodings[i / 3];
+        float min = enc.min; float max = enc.max; float delta = enc.delta; float offset = enc.offset;
+        DataType clipped = std::max(std::min(in[i], max), min);
+        DataType expected = (std::round(clipped / delta - offset) + offset) * delta;
+        EXPECT_NEAR(outputBlob.getDataPtrOnCpu()[i], expected, 0.001);
+
+    }
+
+    EXPECT_THROW(tensorQuantizer.setPercentileValue(90.), std::runtime_error);
+    EXPECT_THROW(tensorQuantizer.getPercentileValue(), std::runtime_error);
+    EXPECT_THROW(tensorQuantizer.getStatsHistogram(), std::runtime_error);
+
+}
+

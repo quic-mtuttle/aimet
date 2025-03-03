@@ -84,6 +84,9 @@ template <typename DTYPE>
 std::unique_ptr<IQuantizationEncodingAnalyzer<DTYPE>> getEncodingAnalyzerInstance(QuantizationMode quantization_mode);
 
 template <typename DTYPE>
+std::unique_ptr<IBlockEncodingAnalyzer<DTYPE>> getBlockEncodingAnalyzerInstance(QuantizationMode quantization_mode, const TensorDims& shape);
+
+template <typename DTYPE>
 std::unique_ptr<ITensorQuantizationSim<DTYPE>> getTensorQuantizationSim();
 
 std::unique_ptr<GraphQuantizer> getGraphQuantizerInstance(const std::vector<std::string>& tensorNames,
