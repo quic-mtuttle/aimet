@@ -76,19 +76,8 @@ void QcQuantizeOp::computeImpl(const Ort::Custom::Tensor<float>& input, Ort::Cus
 
     if (quantInfo->isIntDataType)
     {
-        if (quantInfo->usePerChannelMode)
-        {
-            const int channelAxis = quantInfo->channelAxis;
-            const int blockAxis = (quantInfo-> blockSize == 0) ? -1 : quantInfo->blockAxis;
-            const BroadcastShapeInfo shapeInfo {inputShape, channelAxis, blockAxis, quantInfo->blockSize};
-            modeSpecificActionBroadcastInt(inputData, result, shapeInfo, quantInfo->tensorQuantizerRef, opMode,
-                                   quantInfo->encoding, quantInfo->useSymmetricEncoding, allocator, useCuda, stream);
-        }
-        else
-        {
-            modeSpecificActionInt(inputData, size, result, quantInfo->tensorQuantizerRef[0], opMode, &(quantInfo->encoding[0]),
-                                  quantInfo->useSymmetricEncoding, allocator, useCuda, stream);
-        }
+        modeSpecificActionBroadcastInt(inputData, result, inputShape, quantInfo->tensorQuantizer.get(), opMode,
+            quantInfo->useSymmetricEncoding, allocator, useCuda, stream);
     }
     else
     {
@@ -124,13 +113,6 @@ struct QcQuantizeOpCuda : QcQuantizeOp
                  Ort::Custom::Tensor<float>& output)
     {
         cudaStream_t stream = cuda_ctx.cuda_stream;
-        if ((quantInfo->opMode == DlQuantization::TensorQuantizerOpMode::updateStats) ||
-            (quantInfo->opMode == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize))
-        {
-            // updateStats doesn't use cuda stream, must synchronize first to ensure input buffer is populated
-            cudaStreamSynchronize(stream);
-        }
-
         computeImpl(input, output, stream, true, &cudaAllocator);
     }
 };
