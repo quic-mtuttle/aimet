@@ -64,7 +64,6 @@ except ImportError:
 
 from torchvision import datasets, transforms
 
-from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger, Handle
 from aimet_common.utils import profile as _profile, deprecated, _red # pylint:disable = unused-import
 from aimet_torch._base.nn.modules.custom import CustomSparseConv3DLayer
@@ -872,22 +871,6 @@ def cache_intermediate_datasets(
         return cached_data
     finally:
         setattr(parent, child_name, orig_child)
-
-
-def get_v1_quant_scheme_for_initialization(quant_scheme: QuantScheme) -> QuantScheme:
-    """
-    Convert v1 quant scheme into v1 quant scheme for initialization
-
-    :param quant_scheme: v1 quant scheme from quantsim init parameter
-    :return: v1 quant scheme for initialization
-    """
-    if quant_scheme == QuantScheme.training_range_learning_with_tf_init:
-        return QuantScheme.post_training_tf
-
-    if quant_scheme == QuantScheme.training_range_learning_with_tf_enhanced_init:
-        return QuantScheme.post_training_tf_enhanced
-
-    return quant_scheme
 
 
 def _deleted_module_import_error(name: str, since: str, v1_legacy_api: str = None) -> ImportError:
