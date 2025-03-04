@@ -887,17 +887,6 @@ def cache_intermediate_datasets(
         setattr(parent, child_name, orig_child)
 
 
-def get_propagated_encoding_dict(encoding_dict: List[Dict[str, any]]) -> List[Dict[str, any]]:
-    """
-    Creates encoding dictionary for intermediate ops (when one PyTorch ops results in multiple ONNX nodes), which are
-    filled with the same BW and data_type as the output tensor for that series of ops.
-
-    :param encoding_dict: Encoding dictionary for the final output of the op
-    :return: Encoding dictionary for intermediate activations of the op
-    """
-    return [{"bitwidth": encoding_dict[0]["bitwidth"], "dtype": encoding_dict[0]["dtype"]}]
-
-
 def get_v1_quant_scheme_for_initialization(quant_scheme: QuantScheme) -> QuantScheme:
     """
     Convert v1 quant scheme into v1 quant scheme for initialization
