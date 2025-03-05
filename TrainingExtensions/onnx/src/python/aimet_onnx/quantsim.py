@@ -57,7 +57,7 @@ from packaging import version
 from aimet_common import _libpymo as libpymo, quantsim
 from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme, QuantizationDataType
-from aimet_common.quantsim import extract_global_quantizer_args, VALID_ENCODING_VERSIONS
+from aimet_common.quantsim import extract_global_quantizer_args, VALID_ENCODING_VERSIONS, _INT32_MINIMUM_SCALE
 from aimet_common.utils import save_json_yaml, AimetLogger, _red
 from aimet_common.quant_utils import _convert_encoding_format_0_6_1_to_1_0_0
 from aimet_common.connected_graph.product import Product
@@ -728,6 +728,157 @@ class QuantizationSimModel:
 
         return model
 
+    def _concretize_int32_bias_quantizers(self):
+        # pylint: disable=redefined-builtin, protected-access, too-many-statements
+
+        def get_statistical_bias_scale(_, __, bias: Product) -> np.ndarray:
+            r"""
+            Compute int32 bias scale statistically, such that
+
+            :math:`scale = abs(max(bias)) / 2**31`
+
+            Note that using statistical bias scale isn't ideal for runtime performance
+            on integer accelerators.
+            For better runtime performance, bias encodings should be derived analytically
+            whenever possible. (See ``get_analytic_bias_scale``)
+            """
+            bias_proto = utils.ParamUtils.get_param_by_name(self.model.model, bias.name)
+
+            if bias_proto is None:
+                raise RuntimeError(
+                    "Failed to calibrate encoding of bias. "
+                    f"Couldn't find the value of \"{bias.name}\" statically from the graph."
+                )
+
+            bias = onnx.numpy_helper.to_array(bias_proto)
+
+            bias_scale = np.maximum(abs(bias) / 2**31, _INT32_MINIMUM_SCALE)
+
+            if not bias_qtzr.quant_info.usePerChannelMode:
+                bias_scale = bias_scale.max()
+
+            return bias_scale
+
+        def get_analytic_bias_scale(input: Product, weight: Product, bias: Product) -> np.ndarray:
+            """
+            Derive int32 bias scale analytically from input and weight encodings, such that
+
+            :math:`bias_scale = weight_scale * input_scale`
+
+            This analytic formula is friendly for integer hardware/runtime
+            since bias-add operation ``(input @ weight) + bias`` becomes trivial when
+            both terms share the same quantization scale
+            """
+            weight_qtzr = self.qc_quantize_op_dict.get(weight.name)
+
+            if not (weight_qtzr and weight_qtzr.enabled and weight_qtzr.is_initialized()):
+                # Weight quantizer wasn't created, enabled, or initialized.
+                # Since weight_scale isn't avaiable, fall back to statictical bias scale
+                return get_statistical_bias_scale(input, weight, bias)
+
+            input_qtzr = self._get_closest_enabled_quantizer(input)
+
+            if not (input_qtzr and input_qtzr.enabled and input_qtzr.is_initialized()):
+                return get_statistical_bias_scale(input, weight, bias)
+
+            channel_axis = None
+            num_channels = None
+            block_axis = None
+            block_size = None
+            if weight_qtzr.quant_info.usePerChannelMode:
+                channel_axis = weight_qtzr.quant_info.channelAxis
+                num_channels = weight_qtzr.tensor_quantizer_params.tensor_shape[channel_axis]
+                block_size = weight_qtzr.quant_info.blockSize or None
+                block_axis = weight_qtzr.quant_info.blockAxis if block_size else None
+
+                expected_channel_axis, expected_block_axis = self._get_quantization_axes(op)
+
+                if channel_axis != expected_channel_axis or \
+                        block_axis not in (expected_block_axis, None):
+                    # For example:
+                    #   * Conv with channel_axis=1
+                    #   * ConvTranspose with channel_axis=0
+                    #   * Gemm with channel_axis=1
+                    return get_statistical_bias_scale(input, weight, bias)
+
+            if isinstance(weight_qtzr, GroupedBlockQuantizeDequantize):
+                # NOTE: In LPBQ, bias encodings should be derived from per-channel weight scale
+                weight_scale = weight_qtzr._get_per_channel_scale()
+            else:
+                weight_scale = weight_qtzr._get_scale()
+
+            input_scale = input_qtzr._get_scale()
+
+            if weight_scale is None or input_scale is None:
+                return get_statistical_bias_scale(input, weight, bias)
+
+            bias_scale = input_scale * weight_scale
+
+            if block_size is not None:
+                bias_scale = bias_scale.max(axis=block_axis)
+
+            if channel_axis is not None:
+                bias_scale = bias_scale.reshape([num_channels])
+
+            return bias_scale
+
+
+        switcher = {
+            "Conv": get_analytic_bias_scale,
+            "Gemm": get_analytic_bias_scale,
+            "ConvTranspose": get_analytic_bias_scale,
+            "BatchNormalization": get_statistical_bias_scale,
+            "InstanceNormalization": get_statistical_bias_scale,
+            "LayerNormalization": get_statistical_bias_scale,
+            "GroupNormalization": get_statistical_bias_scale,
+        }
+
+        ops_with_bias = {
+            op
+            for op in self.connected_graph.get_all_ops().values()
+            for param_name, (_, param_type) in op.parameters.items()
+            if param_type == "bias"
+        }
+
+        for op in ops_with_bias:
+            input, *_ = op.inputs
+            weight = None
+            bias = None
+
+            for inp in op.inputs:
+                _, param_type = op.parameters.get(inp.name, (None, None))
+                if param_type == "weight":
+                    weight = inp
+                elif param_type == "bias":
+                    bias = inp
+
+            bias_qtzr = self.qc_quantize_op_dict.get(bias.name)
+
+            if bias_qtzr and bias_qtzr.enabled and bias_qtzr.is_initialized():
+                # Edge case: bias encoding already exists.
+                # Always honor the existing bias encoding
+                continue
+
+            if weight is None:
+                # Edge case: Op has no weight. Fall back to statistical bias scale
+                get_bias_scale = get_statistical_bias_scale
+            else:
+                get_bias_scale = switcher.get(op.type, get_statistical_bias_scale)
+
+            bias_scale = get_bias_scale(input, weight, bias)
+
+            encodings = [libpymo.TfEncoding() for _ in range(bias_scale.size)]
+
+            for enc, scale in zip(encodings, bias_scale.flatten()):
+                enc.bw = 32
+                enc.delta = scale
+                enc.offset = -2**31
+                enc.min = scale * -2**31
+                enc.max = scale * (2**31 - 1)
+
+            bias_qtzr.load_encodings(encodings)
+            bias_qtzr.enabled = True
+
     def export(self, path: str, filename_prefix: str):
         """
         Compute encodings and export to files
@@ -1084,21 +1235,35 @@ def set_blockwise_quantization_for_weights(sim: QuantizationSimModel,
         op_types = (op_types, )
 
     for op in sim.connected_graph.ordered_ops:
-        if op.type in op_types:
-            _, _, param_quantizers = sim.get_op_quantizers(op)
+        if op.type not in op_types:
+            continue
 
-            if "weight" in param_quantizers:
-                weight_quantizer: QcQuantizeOp = param_quantizers["weight"]
+        _, _, param_quantizers = sim.get_op_quantizers(op)
 
-                try:
-                    weight_quantizer._enable_blockwise_quantization(block_size) # pylint:disable = protected-access
-                except ValueError as e:
-                    if strict:
-                        raise e
-                else:
-                    weight_quantizer.set_bitwidth(bitwidth)
-                    weight_quantizer.use_symmetric_encodings = symmetric
-                    weight_quantizer.data_type = QuantizationDataType.int
+        weight_quantizer: QcQuantizeOp = param_quantizers.get("weight")
+        bias_quantizer: QcQuantizeOp = param_quantizers.get("bias")
+
+        if not weight_quantizer:
+            continue
+
+        try:
+            weight_quantizer._enable_blockwise_quantization(block_size) # pylint:disable = protected-access
+        except ValueError as e:
+            if strict:
+                raise e
+        else:
+            weight_quantizer.set_bitwidth(bitwidth)
+            weight_quantizer.use_symmetric_encodings = symmetric
+            weight_quantizer.data_type = QuantizationDataType.int
+
+            if bias_quantizer:
+                # Enable per-channel quantization of bias to derive bias_scale analytically as
+                # :math:`bias_scale = weight_scale * input_scale` in export time.
+                # ``bias_scale`` should be per-channel if ``weight_scale`` is per-channel or per-block
+                # to match the shape
+                bias_quantizer.enable_per_channel_quantization()
+                bias_quantizer.use_symmetric_encodings = symmetric
+                bias_quantizer.data_type = QuantizationDataType.int
 
 
 def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel,
@@ -1132,29 +1297,42 @@ def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel,
         op_types = (op_types, )
 
     for op in sim.connected_graph.ordered_ops:
+        if op.type not in op_types:
+            continue
 
-        if op.type in op_types:
-            _, _, param_quantizers = sim.get_op_quantizers(op)
+        _, _, param_quantizers = sim.get_op_quantizers(op)
 
 
-            if "weight" in param_quantizers:
-                weight_quantizer: QcQuantizeOp = param_quantizers["weight"]
+        weight_quantizer: QcQuantizeOp = param_quantizers.get("weight")
+        bias_quantizer: QcQuantizeOp = param_quantizers.get("bias")
 
-                try:
-                    grouped_quantizer = GroupedBlockQuantizeDequantize(weight_quantizer.quant_info,
-                                                                       bitwidth,
-                                                                       decompressed_bw,
-                                                                       block_size,
-                                                                       weight_quantizer.quant_scheme,
-                                                                       weight_quantizer.op_mode,
-                                                                       weight_quantizer.tensor_quantizer_params)
-                except ValueError as e:
-                    if strict:
-                        raise e
-                else:
-                    for name, quantizer in sim.qc_quantize_op_dict.items():
-                        if quantizer is weight_quantizer:
-                            sim.qc_quantize_op_dict[name] = grouped_quantizer
+        if not weight_quantizer:
+            continue
+
+        try:
+            grouped_quantizer = GroupedBlockQuantizeDequantize(weight_quantizer.quant_info,
+                                                               bitwidth,
+                                                               decompressed_bw,
+                                                               block_size,
+                                                               weight_quantizer.quant_scheme,
+                                                               weight_quantizer.op_mode,
+                                                               weight_quantizer.tensor_quantizer_params)
+        except ValueError as e:
+            if strict:
+                raise e
+        else:
+            if bias_quantizer:
+                # Enable per-channel quantization of bias to derive bias_scale analytically as
+                # :math:`bias_scale = weight_scale * input_scale` in export time.
+                # ``bias_scale`` should be per-channel if ``weight_scale`` is per-channel or per-block
+                # to match the shape
+                bias_quantizer.enable_per_channel_quantization()
+                bias_quantizer.use_symmetric_encodings = True
+                bias_quantizer.data_type = QuantizationDataType.int
+
+            for name, quantizer in sim.qc_quantize_op_dict.items():
+                if quantizer is weight_quantizer:
+                    sim.qc_quantize_op_dict[name] = grouped_quantizer
 
 
 # pylint: disable=protected-access

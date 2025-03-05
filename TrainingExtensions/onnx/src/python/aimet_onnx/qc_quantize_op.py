@@ -289,13 +289,13 @@ class QcQuantizeOp:
         """
         return self.get_encodings()
 
-    def _get_scale(self) -> np.ndarray:
+    def _get_scale(self) -> Optional[np.ndarray]:
         encodings = self.get_encodings()
         if encodings is None:
             return None
         return np.array([enc.delta for enc in encodings], dtype=np.float32).reshape(self._encoding_shape())
 
-    def _get_offset(self) -> np.ndarray:
+    def _get_offset(self) -> Optional[np.ndarray]:
         encodings = self.get_encodings()
         if encodings is None:
             return None
@@ -788,6 +788,18 @@ class GroupedBlockQuantizeDequantize(QcQuantizeOp):
         self.decompressed_bw = decompressed_bw
         self._enable_blockwise_quantization(block_size)
         self.data_type = QuantizationDataType.int
+
+    def _get_per_channel_scale(self) -> Optional[np.ndarray]:
+        scale = self._get_scale()
+        if scale is None:
+            return None
+
+        decompressed_bw = self.decompressed_bw
+        compressed_bw = self.bitwidth
+        _, per_channel_scale = lpbq_utils.grouped_dynamic_quantize(scale,
+                                                                   self._block_grouping(),
+                                                                   decompressed_bw - compressed_bw)
+        return per_channel_scale
 
     def _block_grouping(self):
         grouping = [1 for _ in range(len(self._encoding_shape()))]
