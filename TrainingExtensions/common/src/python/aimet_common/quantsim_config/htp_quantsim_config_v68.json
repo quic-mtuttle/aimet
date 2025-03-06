@@ -165,6 +165,10 @@
     }
   },
 
+  "supergroup_pass_list":
+  [
+    "LayerNormalization"  
+  ],
   "supergroups":
   [
     {
