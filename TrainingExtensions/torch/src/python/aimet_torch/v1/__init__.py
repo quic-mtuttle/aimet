@@ -41,7 +41,9 @@
 # see https://packaging.python.org/en/latest/guides/packaging-namespace-packages
 __path__ = __import__('pkgutil').extend_path(__path__, __name__)
 
+import sys
 import sysconfig
+import platform
 
 import torch as _torch
 from aimet_common import _deps
@@ -78,6 +80,10 @@ def _is_torch_compatible(current: str, required: str):
     return cuda_major == required_cuda_major
 
 
+def _is_glibc_compatible(current: str, required: str):
+    return list(map(int, required.split('.'))) <= list(map(int, current.split('.')))
+
+
 def _check_requirements():
     reasons = []
 
@@ -98,6 +104,15 @@ def _check_requirements():
         _, cuda = patch.split("+")
         reasons.append(f"  * torch=={major}.{minor}.*+{cuda} "
                        f"(currently you have torch=={_torch.__version__})")
+
+    # Check glibc version
+    if _deps.min_glibc and sys.platform == "linux":
+        libc, libc_version = platform.libc_ver()
+        if libc != "glibc":
+            reasons.append(f"  * libc==glibc (currently you have {libc})")
+        elif not _is_glibc_compatible(libc_version, _deps.min_glibc):
+            reasons.append(f"  * glibc>={_deps.min_glibc} "
+                           f"(currently you have glibc=={libc_version})")
 
     if reasons:
         msg = "\n".join([
