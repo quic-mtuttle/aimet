@@ -100,11 +100,9 @@ quantized_modules = (
 )
 
 
-class QuantizationSimModel(_QuantizationSimModelBase):
-    """
-    Implements mechanism to add quantization simulations ops to a model. This allows for off-target simulation of
-    inference accuracy. Also allows the model to be fine-tuned to counter the effects of quantization.
-    """
+class QuantizationSimModel(_QuantizationSimModelBase): # pylint: disable=missing-class-docstring
+    __doc__ = _QuantizationSimModelBase.__doc__
+
     # pylint: disable=too-many-arguments, too-many-locals, too-many-public-methods
     _quantized_modules = quantized_modules
 
