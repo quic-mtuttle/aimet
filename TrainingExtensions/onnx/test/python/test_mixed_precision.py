@@ -52,7 +52,7 @@ from aimet_onnx.defs import DataLoader
 
 from aimet_common.defs import QuantizationDataType, CallbackFunc
 from aimet_common.amp.mixed_precision_algo import interpolation_search, brute_force_search, binary_search
-from aimet_common.amp.utils import calculate_starting_bit_ops
+from aimet_common.amp.utils import calculate_starting_bit_ops, AMPSearchAlgo
 
 from .models.test_models import single_residual_model
 
@@ -570,6 +570,17 @@ class TestAMPv1:
                     assert c in conv_supported_kernels
                 else:
                     assert c in default_supported_kernels
+
+    def test_respect_frozen_encodings(self, sim, forward_pass_callback, eval_callback_phase1, results_dir):
+        quantizer = [q for name, q in sim.qc_quantize_op_dict.items() if name in sim.param_names and q.enabled][0]
+        quantizer.set_bitwidth(4)
+        sim.compute_encodings(forward_pass_callback.func, forward_pass_callback.args)
+        quantizer.freeze_encodings()
+        candidates = [W8A8, W8A16]
+        algo = GreedyMixedPrecisionAlgo(sim, candidates, eval_callback_phase1, unittest.mock.MagicMock(),
+                                        results_dir, True, forward_pass_callback)
+        algo.run(0.01, AMPSearchAlgo.Binary)
+        assert quantizer.bitwidth == 4
 
 
 class TestAMPv2:

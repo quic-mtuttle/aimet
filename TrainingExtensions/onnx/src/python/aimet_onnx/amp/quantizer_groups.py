@@ -101,11 +101,11 @@ class QuantizerGroup(QuantizerGroupBase):
         (activation_bw, activation_dtype), (param_bw, param_dtype) = candidate
 
         for quantizer in self.get_activation_quantizers(name_to_quantizer_dict):
-            quantizer.bitwidth = activation_bw
+            quantizer.set_bitwidth(activation_bw)
             quantizer.data_type = activation_dtype
 
         for quantizer in self.get_param_quantizers(name_to_quantizer_dict):
-            quantizer.bitwidth = param_bw
+            quantizer.set_bitwidth(param_bw)
             quantizer.data_type = param_dtype
 
     def to_list(self) -> List[Tuple[str, str]]:
